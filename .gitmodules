@@ -1,0 +1,3 @@
+[submodule "libet"]
+	path = libet
+	url = git://github.com/kurt-vd/libet
