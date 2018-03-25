@@ -1,0 +1,10 @@
+# output
+*.o
+wifitomqtt
+
+# environment
+tags
+config.mk
+
+# test files
+*.nmea
