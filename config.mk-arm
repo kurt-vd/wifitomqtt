@@ -1,0 +1,4 @@
+CC=/srv/br/belrob/host/usr/bin/arm-linux-gcc
+ld=$(CC)
+LDFLAGS+= -s
+CFLAGS += -O0 -g3
