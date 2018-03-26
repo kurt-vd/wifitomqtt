@@ -37,26 +37,13 @@
 #include <mosquitto.h>
 
 #include "libet/libt.h"
+#include "common.h"
 
 #define NAME "wifitomqtt"
 #ifndef VERSION
 #define VERSION "<undefined version>"
 #endif
 
-/* generic error logging */
-void mylog(int loglevel, const char *fmt, ...)
-{
-	va_list va;
-
-	va_start(va, fmt);
-	//vsyslog(loglevel, fmt, va);
-	vfprintf(stderr, fmt, va);
-	va_end(va);
-	fputc('\n', stderr);
-	if (loglevel <= LOG_ERR)
-		exit(1);
-	fflush(stderr);
-}
 #define ESTR(num)	strerror(num)
 
 /* program options */
@@ -516,27 +503,6 @@ static int wpa_connect(const char *iface)
 }
 
 /* MQTT API */
-static char *myuuid;
-static const char selfsynctopic[] = "tmp/selfsync";
-static void send_self_sync(struct mosquitto *mosq)
-{
-	int ret;
-
-	asprintf(&myuuid, "%i-%li-%i", getpid(), time(NULL), rand());
-
-	ret = mosquitto_subscribe(mosq, NULL, selfsynctopic, mqtt_qos);
-	if (ret)
-		mylog(LOG_ERR, "mosquitto_subscribe %s: %s", selfsynctopic, mosquitto_strerror(ret));
-	ret = mosquitto_publish(mosq, NULL, selfsynctopic, strlen(myuuid), myuuid, mqtt_qos, 0);
-	if (ret < 0)
-		mylog(LOG_ERR, "mosquitto_publish %s: %s", selfsynctopic, mosquitto_strerror(ret));
-}
-static int is_self_sync(const struct mosquitto_message *msg)
-{
-	return !strcmp(msg->topic, selfsynctopic) &&
-		!strncmp(myuuid ?: "", msg->payload ?: "", msg->payloadlen);
-}
-
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
 	int ret;
@@ -764,7 +730,7 @@ int main(int argc, char *argv[])
 	publish_value("", "net/%s/ssid", iface);
 
 	/* terminate */
-	send_self_sync(mosq);
+	send_self_sync(mosq, mqtt_qos);
 	while (!ready) {
 		ret = mosquitto_loop(mosq, 10, 1);
 		if (ret < 0)

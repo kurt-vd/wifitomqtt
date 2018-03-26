@@ -16,7 +16,7 @@ VERSION := $(shell git describe --tags --always)
 # avoid overruling the VERSION
 CPPFLAGS += -DVERSION=\"$(VERSION)\"
 
-wifitomqtt: libet/libt.o
+wifitomqtt: libet/libt.o common.o
 
 install: $(PROGS)
 	$(foreach PROG, $(PROGS), install -vp -m 0777 $(INSTOPTS) $(PROG) $(DESTDIR)$(PREFIX)/bin/$(PROG);)
