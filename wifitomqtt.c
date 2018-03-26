@@ -637,7 +637,7 @@ static void subscribe_topic(const char *topicfmt, ...)
 
 int main(int argc, char *argv[])
 {
-	int opt, ret;
+	int opt, ret, j;
 	char *str;
 	char mqtt_name[32];
 	int logmask = LOG_UPTO(LOG_NOTICE);
@@ -751,6 +751,17 @@ int main(int argc, char *argv[])
 				mylog(LOG_ERR, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
 		}
 	}
+
+	/* clean scan results in mqtt */
+	for (j = 0; j < naps; ++j) {
+		publish_value("", "net/%s/ap/%s/freq", iface, aps[j].bssid);
+		publish_value("", "net/%s/ap/%s/level", iface, aps[j].bssid);
+		publish_value("", "net/%s/ap/%s/ssid", iface, aps[j].bssid);
+	}
+	publish_value("", "net/%s/bssid", iface);
+	publish_value("", "net/%s/freq", iface);
+	publish_value("", "net/%s/level", iface);
+	publish_value("", "net/%s/ssid", iface);
 
 	/* terminate */
 	send_self_sync(mosq);
