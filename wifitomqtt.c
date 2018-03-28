@@ -83,6 +83,9 @@ static const char optstring[] = "Vv?h:i:";
 static volatile int sigterm;
 static volatile int ready;
 
+/* logging */
+static int loglevel = LOG_WARNING;
+
 /* MQTT parameters */
 static const char *mqtt_host = "localhost";
 static int mqtt_port = 1883;
@@ -298,7 +301,7 @@ static int wpa_send(const char *fmt, ...)
 		mylog(LOG_ERR, "send wpa: %s", ESTR(errno));
 	add_strq(line);
 	libt_add_timeout(5, wpa_keepalive, NULL);
-	fprintf(stderr, "> %s\n", line);
+	mylog(LOG_DEBUG, "> %s", line);
 	return ret;
 }
 
@@ -310,14 +313,16 @@ static void wpa_keepalive(void *dat)
 static void wpa_recvd_pkt(char *line)
 {
 	int ret, j;
-	char *tok, *saveptr;
+	char *tok, *saveptr, *nl;
 	struct str *head;
 
 	ret = strlen(line);
 	line[ret] = 0;
 	if (line[ret-1] == '\n')
 		line[ret-1] = 0;
-	fprintf(stderr, "< %s\n", line);
+	/* prepare log */
+	nl = strchr(line, '\n');
+	mylog(LOG_DEBUG, "< %.*s%s", (int)(nl ? nl - line : strlen(line)), line, nl ? " ..." : "");
 
 	if (!mystrncmp("<2>", line) || !mystrncmp("<3>", line)) {
 		/* publish line+3 to mqtt log */
@@ -350,7 +355,7 @@ static void wpa_recvd_pkt(char *line)
 	if (!strcmp(line, "FAIL") || !strcmp(line, "UNKNOWN COMMAND")) {
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
 	} else if (!strcmp(head->a, "ATTACH")) {
-		mylog(LOG_INFO, "wpa connected");
+		mylog(LOG_NOTICE, "wpa connected");
 
 		wpa_send("LIST_NETWORKS");
 		wpa_send("SCAN_RESULTS");
@@ -608,7 +613,6 @@ int main(int argc, char *argv[])
 	int opt, ret, j;
 	char *str;
 	char mqtt_name[32];
-	int logmask = LOG_UPTO(LOG_NOTICE);
 	struct pollfd pf[2];
 
 	setlocale(LC_ALL, "");
@@ -620,14 +624,7 @@ int main(int argc, char *argv[])
 				NAME, VERSION, __DATE__, __TIME__);
 		exit(0);
 	case 'v':
-		switch (logmask) {
-		case LOG_UPTO(LOG_NOTICE):
-			logmask = LOG_UPTO(LOG_INFO);
-			break;
-		case LOG_UPTO(LOG_INFO):
-			logmask = LOG_UPTO(LOG_DEBUG);
-			break;
-		}
+		++loglevel;
 		break;
 	case 'h':
 		mqtt_host = optarg;
@@ -650,11 +647,10 @@ int main(int argc, char *argv[])
 		break;
 	}
 
+	setmylog(NAME, 0, LOG_LOCAL2, loglevel);
 	atexit(my_exit);
 	mysignal(SIGINT, onsigterm);
 	mysignal(SIGTERM, onsigterm);
-	openlog(NAME, LOG_PERROR, LOG_LOCAL2);
-	setlogmask(logmask);
 
 	/* WPA */
 	wpasock = wpa_connect(iface);
