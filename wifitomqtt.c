@@ -195,6 +195,7 @@ static struct network *add_network(int num, const char *ssid)
 			mylog(LOG_ERR, "realloc %i networks: %s", snetworks, ESTR(errno));
 	}
 	net = &networks[nnetworks++];
+	memset(net, 0, sizeof(*net));
 
 	net->id = num;
 	net->ssid = strdup(ssid);
@@ -245,6 +246,7 @@ static void add_ap(const char *bssid, int freq, int level, const char *flags, co
 			mylog(LOG_ERR, "realloc %i aps: %s", saps, ESTR(errno));
 	}
 	ap = &aps[naps++];
+	memset(ap, 0, sizeof(*ap));
 	strncpy(ap->bssid, bssid, sizeof(ap->bssid));
 	ap->freq = freq;
 	ap->level = level;
