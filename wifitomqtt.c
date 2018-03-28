@@ -262,7 +262,7 @@ static void add_ap(const char *bssid, int freq, int level, const char *flags, co
 	ap->freq = freq;
 	ap->level = level;
 	/* TODO: flags */
-	if (ap->ssid) {
+	if (ssid) {
 		ap->ssid = strdup(ssid);
 		if (find_network_by_ssid(ssid))
 			ap->flags |= BF_KNOWN;
