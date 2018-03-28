@@ -14,6 +14,7 @@ struct mosquitto_message;
 #define ESTR(num)	strerror(num)
 __attribute__((format(printf,2,3)))
 extern void mylog(int loglevel, const char *fmt, ...);
+extern void setmylog(const char *name, int options, int facility, int loglevel);
 
 /* MQTT self-sync */
 extern void send_self_sync(struct mosquitto *, int qos);

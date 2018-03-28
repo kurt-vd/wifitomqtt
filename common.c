@@ -12,26 +12,40 @@
 #include "common.h"
 
 /* error logging */
+static int logtostderr = -1;
+static int maxloglevel;
+
+void setmylog(const char *name, int options, int facility, int level)
+{
+	char *tty;
+
+	tty = ttyname(STDERR_FILENO);
+	logtostderr = tty && !!strcmp(tty, "/dev/console");
+	if (!logtostderr && name) {
+		openlog(name, options, facility);
+		setlogmask(LOG_UPTO(level));
+	} else
+		maxloglevel = level;
+}
+
 void mylog(int loglevel, const char *fmt, ...)
 {
-	static int use_stderr = -1;
 	va_list va;
 
-	if (use_stderr < 0) {
-		char *tty;
+	if (logtostderr < 0)
+		setmylog(NULL, 0, LOG_LOCAL1, LOG_WARNING);
 
-		tty = ttyname(STDERR_FILENO);
-		use_stderr = tty && !!strcmp(tty, "/dev/console");
-	}
-
+	if (logtostderr && loglevel > maxloglevel)
+		goto done;
 	va_start(va, fmt);
-	if (use_stderr) {
+	if (logtostderr) {
 		vfprintf(stderr, fmt, va);
 		fputc('\n', stderr);
 		fflush(stderr);
 	} else
 		vsyslog(loglevel, fmt, va);
 	va_end(va);
+done:
 	if (loglevel <= LOG_ERR)
 		exit(1);
 }
