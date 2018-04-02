@@ -102,6 +102,7 @@ static const char *valuetostr(const char *fmt, ...);
 /* WPA */
 static const char *iface = "wlan0";
 static int wpasock;
+static int have_bss_events;
 
 /* signalling */
 static int mysignal(int signr, void (*fn)(int))
@@ -342,13 +343,16 @@ static void wpa_recvd_pkt(char *line)
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
 			wpa_send("BSS %s", tok);
+			have_bss_events = 1;
 		} else if (!strcmp(tok, "CTRL-EVENT-BSS-REMOVED")) {
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
 			remove_ap(find_ap_by_bssid(tok));
 			hide_ap_mqtt(tok);
+			have_bss_events = 1;
 		} else if (!strcmp(tok, "CTRL-EVENT-SCAN-RESULTS")) {
-			wpa_send("SCAN_RESULTS");
+			if (!have_bss_events)
+				wpa_send("SCAN_RESULTS");
 		}
 		return;
 	}
