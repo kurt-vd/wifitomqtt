@@ -262,10 +262,8 @@ static void add_ap(const char *bssid, int freq, int level, const char *flags, co
 	qsort(aps, naps, sizeof(*aps), apbssidcmp);
 }
 
-static void remove_ap(const char *bssid)
+static void remove_ap(struct ap *ap)
 {
-	struct ap *ap = find_ap_by_bssid(bssid);
-
 	if (!ap)
 		return;
 	/* handle memory */
@@ -276,6 +274,13 @@ static void remove_ap(const char *bssid)
 	if (idx != naps-1)
 		memcpy(ap, ap+1, (naps-1-idx)*sizeof(*aps));
 	--naps;
+}
+
+static void hide_ap_mqtt(const char *bssid)
+{
+	publish_value("", "net/%s/ap/%s/freq", iface, bssid);
+	publish_value("", "net/%s/ap/%s/level", iface, bssid);
+	publish_value("", "net/%s/ap/%s/ssid", iface, bssid);
 }
 
 /* wpa functions */
@@ -339,11 +344,8 @@ static void wpa_recvd_pkt(char *line)
 		} else if (!strcmp(tok, "CTRL-EVENT-BSS-REMOVED")) {
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
-			remove_ap(tok);
-
-			publish_value("", "net/%s/ap/%s/freq", iface, tok);
-			publish_value("", "net/%s/ap/%s/level", iface, tok);
-			publish_value("", "net/%s/ap/%s/ssid", iface, tok);
+			remove_ap(find_ap_by_bssid(tok));
+			hide_ap_mqtt(tok);
 		}
 		return;
 	}
