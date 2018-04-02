@@ -218,6 +218,7 @@ struct ap {
 	int flags;
 		#define BF_WPA		0x01
 		#define BF_KNOWN	0x02
+		#define BF_PRESENT	0x04 /* for re-adding */
 };
 
 static struct ap *aps;
@@ -346,6 +347,8 @@ static void wpa_recvd_pkt(char *line)
 			tok = strtok(NULL, " \t");
 			remove_ap(find_ap_by_bssid(tok));
 			hide_ap_mqtt(tok);
+		} else if (!strcmp(tok, "CTRL-EVENT-SCAN-RESULTS")) {
+			wpa_send("SCAN_RESULTS");
 		}
 		return;
 	}
@@ -384,19 +387,34 @@ static void wpa_recvd_pkt(char *line)
 		sort_networks();
 
 	} else if (!strcmp(head->a, "SCAN_RESULTS")) {
-		/* clear ap list */
+		/* clear BF_PRESENT flag in ap list */
 		for (j = 0; j < naps; ++j)
-			free(aps[j].ssid);
-		naps = 0;
+			aps[j].flags &= ~BF_PRESENT;
 
 		/* parse lines */
+		char *bssid;
+		struct ap *ap;
 		for (line = strtok_r(line, "\r\n", &saveptr); line;
 				line = strtok_r(NULL, "\r\n", &saveptr)) {
 			if (!mystrncmp("bssid", line))
 				/* header line */
 				continue;
+			bssid = strtok(line, "\t");
 			/* process like 'hot-detected' bssid's */
-			wpa_send("BSS %s", strtok(line, "\t"));
+			wpa_send("BSS %s", bssid);
+			ap = find_ap_by_bssid(bssid);
+			/* mark ap as present */
+			if (ap)
+				ap->flags |= BF_PRESENT;
+		}
+		for (j = 0; j < naps; ) {
+			if (aps[j].flags & BF_PRESENT) {
+				++j;
+				continue;
+			}
+			/* remove this ap */
+			hide_ap_mqtt(aps[j].bssid);
+			remove_ap(aps+j);
 		}
 
 	} else if (!mystrncmp("BSS ", head->a)) {
