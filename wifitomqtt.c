@@ -557,7 +557,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			/* sorting invalidates 'net' pointer */
 			newnetwork = find_network_by_ssid(toks[2]);
 		} else {
-			wpa_send("SET_NETWORK %i psk \"%s\"", net->id, (char *)msg->payload);
+			wpa_send("SET_NETWORK %i psk %s", net->id, (char *)msg->payload);
 		}
 	}
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
