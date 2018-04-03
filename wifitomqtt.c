@@ -294,6 +294,7 @@ static inline int mystrncmp(const char *needle, const char *haystack)
 	return strncmp(needle, haystack, strlen(needle));
 }
 
+static void wpa_cmd_timeout(void *);
 static void wpa_keepalive(void *);
 __attribute__((format(printf,1,2)))
 static int wpa_send(const char *fmt, ...)
@@ -310,9 +311,17 @@ static int wpa_send(const char *fmt, ...)
 	if (ret < 0)
 		mylog(LOG_ERR, "send wpa: %s", ESTR(errno));
 	add_strq(line);
-	libt_add_timeout(5, wpa_keepalive, NULL);
 	mylog(LOG_DEBUG, "> %s", line);
+	libt_add_timeout(0.5, wpa_cmd_timeout, NULL);
+	libt_add_timeout(5, wpa_keepalive, NULL);
 	return ret;
+}
+
+static void wpa_cmd_timeout(void *dat)
+{
+	/* no pong recvd, reattach? */
+	mylog(LOG_WARNING, "wpa lost");
+	wpa_lost = 1;
 }
 
 static void wpa_keepalive(void *dat)
@@ -367,6 +376,7 @@ static void wpa_recvd_pkt(char *line)
 		mylog(LOG_WARNING, "unsolicited response '%s'", line);
 		return;
 	}
+	libt_remove_timeout(wpa_cmd_timeout, NULL);
 	if (!strcmp(line, "FAIL") || !strcmp(line, "UNKNOWN COMMAND")) {
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
 	} else if (!strcmp(head->a, "ATTACH")) {
@@ -433,6 +443,7 @@ static void wpa_recvd_pkt(char *line)
 		char *flags = NULL;
 		int freq = 0, level = 0;
 		char *val;
+
 		for (line = strtok_r(line, "\r\n", &saveptr); line;
 				line = strtok_r(NULL, "\r\n", &saveptr)) {
 			tok = strtok(line, "=");
@@ -736,6 +747,8 @@ int main(int argc, char *argv[])
 
 	while (!sigterm) {
 		libt_flush();
+		if (wpa_lost)
+			break;
 		ret = poll(pf, 2, libt_get_waittime());
 		if (ret < 0 && errno == EINTR)
 			continue;
@@ -792,5 +805,5 @@ int main(int argc, char *argv[])
 			mylog(LOG_ERR, "mosquitto_loop: %s", mosquitto_strerror(ret));
 	}
 
-	return 0;
+	return !sigterm;
 }
