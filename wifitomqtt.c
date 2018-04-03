@@ -239,6 +239,9 @@ static struct ap *find_ap_by_bssid(const char *bssid)
 {
 	struct ap needle;
 
+	if (!bssid)
+		return NULL;
+
 	strncpy(needle.bssid, bssid, sizeof(needle.bssid));
 	return bsearch(&needle, aps, naps, sizeof(*aps), apbssidcmp);
 }
@@ -341,7 +344,7 @@ static void wpa_recvd_pkt(char *line)
 
 	ret = strlen(line);
 	line[ret] = 0;
-	if (line[ret-1] == '\n')
+	if (ret && line[ret-1] == '\n')
 		line[ret-1] = 0;
 	/* prepare log */
 	nl = strchr(line, '\n');
@@ -380,6 +383,8 @@ static void wpa_recvd_pkt(char *line)
 	libt_remove_timeout(wpa_cmd_timeout, NULL);
 	if (!strcmp(line, "FAIL") || !strcmp(line, "UNKNOWN COMMAND")) {
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
+	} else if (!*line) {
+		/* empty reply */
 	} else if (!strcmp(head->a, "ATTACH")) {
 		mylog(LOG_NOTICE, "wpa connected");
 
@@ -476,7 +481,7 @@ static void wpa_recvd_pkt(char *line)
 					publish_value(valuetostr("%i", level), "net/%s/level", iface);
 				curr_level = level;
 			}
-		} else {
+		} else if (bssid) {
 			add_ap(bssid, freq, level, flags, ssid);
 			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
 			publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
