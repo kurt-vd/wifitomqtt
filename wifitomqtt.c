@@ -103,6 +103,9 @@ static const char *valuetostr(const char *fmt, ...);
 static const char *iface = "wlan0";
 static int wpasock;
 static int have_bss_events;
+static int wpa_lost;
+static char curr_bssid[20];
+static int curr_level;
 
 /* signalling */
 static int mysignal(int signr, void (*fn)(int))
@@ -314,7 +317,10 @@ static int wpa_send(const char *fmt, ...)
 
 static void wpa_keepalive(void *dat)
 {
-	wpa_send("PING");
+	if (curr_bssid[0])
+		wpa_send("BSS %s", curr_bssid);
+	else
+		wpa_send("PING");
 }
 
 static void wpa_recvd_pkt(char *line)
@@ -453,6 +459,11 @@ static void wpa_recvd_pkt(char *line)
 				publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
 			ap->freq = freq;
 			ap->level = level;
+			if (!strcmp(curr_bssid, bssid ?: "")) {
+				if (level != curr_level)
+					publish_value(valuetostr("%i", level), "net/%s/level", iface);
+				curr_level = level;
+			}
 		} else {
 			add_ap(bssid, freq, level, flags, ssid);
 			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
@@ -461,26 +472,37 @@ static void wpa_recvd_pkt(char *line)
 		}
 	} else if (!strcmp("STATUS", head->a)) {
 		char *val;
-		char *bssid = NULL, *ssid = NULL;
+		char *ssid = NULL;
 		int freq = 0;
 
+		curr_bssid[0] = 0;
 		for (line = strtok_r(line, "\r\n", &saveptr); line;
 				line = strtok_r(NULL, "\r\n", &saveptr)) {
 			tok = strtok(line, "=");
 			val = strtok(NULL, "=");
 			if (!strcmp(tok, "bssid"))
-				bssid = val;
+				strcpy(curr_bssid, val);
 			else if (!strcmp(tok, "ssid"))
 				ssid = val;
 			else if (!strcmp(tok, "freq"))
 				freq = strtoul(val, NULL, 0);
 		}
-		publish_value(bssid, "net/%s/bssid", iface);
-		publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
-		struct ap *ap = find_ap_by_bssid(bssid ?: "");
-		if (ap)
-			publish_value(valuetostr("%i", ap->level), "net/%s/level", iface);
-		publish_value(ssid, "net/%s/ssid", iface);
+		publish_value(curr_bssid, "net/%s/bssid", iface);
+		if (curr_bssid[0]) {
+			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
+			struct ap *ap = find_ap_by_bssid(curr_bssid);
+			if (ap) {
+				if (curr_level != ap->level)
+					publish_value(valuetostr("%i", ap->level), "net/%s/level", iface);
+				curr_level = ap->level;
+			}
+			publish_value(ssid, "net/%s/ssid", iface);
+		} else {
+			publish_value("", "net/%s/freq", iface);
+			publish_value("", "net/%s/level", iface);
+			publish_value("", "net/%s/ssid", iface);
+			curr_level = 0;
+		}
 
 	} else if (!mystrncmp("ADD_NETWORK", head->a)) {
 		int id;
