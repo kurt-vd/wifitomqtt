@@ -105,6 +105,7 @@ static int wpasock;
 static int have_bss_events;
 static int wpa_lost;
 static int self_ap; /* we are AP ourselve */
+static int self_ap_req; /* mqtt requested ap mode */
 static char curr_bssid[20];
 static int curr_level;
 
@@ -190,6 +191,16 @@ static struct network *find_network_by_ssid(const char *ssid)
 	};
 
 	return bsearch(&needle, networks, nnetworks, sizeof(*networks), networkcmp);
+}
+
+static struct network *find_network_by_id(int idx)
+{
+	int j;
+
+	for (j = 0; j < nnetworks; ++j)
+		if (networks[j].id == idx)
+			return networks+j;
+	return NULL;
 }
 
 static struct network *add_network(int num, const char *ssid)
@@ -393,6 +404,33 @@ static void wpa_recvd_pkt(char *line)
 		wpa_send("SCAN_RESULTS");
 		wpa_send("STATUS");
 
+	} else if (!mystrncmp("GET_NETWORK ", head->a)) {
+		int id;
+		char *name;
+		struct network *net;
+
+		strtok(head->a, " "); /* pop GET_NETWORK */
+		id = strtoul(strtok(NULL, " ") ?: "-1", NULL, 0);
+		name = strtok(NULL, " ") ?: "";
+
+		net = find_network_by_id(id);
+		if (!net)
+			;
+		else if (!strcmp(name, "mode")) {
+			int mode;
+
+			mode = strtoul(line, NULL, 0);
+			if (self_ap_req && mode == 2) {
+				self_ap_req = 0;
+				wpa_send("SELECT_NETWORK %i", net->id);
+				mylog(LOG_NOTICE, "ap mode requested, selected '%s'", net->ssid);
+			} else if (self_ap_req && (net == networks+nnetworks-1)) {
+				/* last network */
+				self_ap_req = 0;
+				mylog(LOG_NOTICE, "ap mode requested but none configured");
+			}
+		}
+
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
 		for (j = 0; j < nnetworks; ++j)
@@ -593,7 +631,7 @@ static int wpa_connect(const char *iface)
 /* MQTT API */
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
-	int ret;
+	int ret, j;
 
 	if (is_self_sync(msg))
 		ready = 1;
@@ -609,6 +647,11 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		wpa_send(msg->payload);
 	} else if (!strcmp(toks[2], "scan")) {
 		wpa_send("SCAN");
+	} else if (!strcmp(toks[2], "ap")) {
+		self_ap_req = 1;
+		/* request all networks mode */
+		for (j = 0; j < nnetworks; ++j)
+			wpa_send("GET_NETWORK %i mode", networks[j].id);
 	} else if (!strcmp(toks[2], "ssid") && ntoks >= 4 && !strcmp(toks[3], "set")) {
 		/* select new ssid. Do this only for new msgs (!retained) */
 		if (msg->payloadlen && strcmp(msg->payload, "all")) {
