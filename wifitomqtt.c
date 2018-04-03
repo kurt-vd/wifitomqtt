@@ -104,6 +104,7 @@ static const char *iface = "wlan0";
 static int wpasock;
 static int have_bss_events;
 static int wpa_lost;
+static int self_ap; /* we are AP ourselve */
 static char curr_bssid[20];
 static int curr_level;
 
@@ -330,7 +331,7 @@ static void wpa_cmd_timeout(void *dat)
 
 static void wpa_keepalive(void *dat)
 {
-	if (curr_bssid[0])
+	if (!self_ap && curr_bssid[0])
 		wpa_send("BSS %s", curr_bssid);
 	else
 		wpa_send("PING");
@@ -476,7 +477,7 @@ static void wpa_recvd_pkt(char *line)
 				publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
 			ap->freq = freq;
 			ap->level = level;
-			if (!strcmp(curr_bssid, bssid ?: "")) {
+			if (!self_ap && !strcmp(curr_bssid, bssid ?: "")) {
 				if (level != curr_level)
 					publish_value(valuetostr("%i", level), "net/%s/level", iface);
 				curr_level = level;
@@ -503,9 +504,15 @@ static void wpa_recvd_pkt(char *line)
 				ssid = val;
 			else if (!strcmp(tok, "freq"))
 				freq = strtoul(val, NULL, 0);
+			else if (!strcmp(tok, "mode"))
+				self_ap = !strcmp(val, "AP");
 		}
 		publish_value(curr_bssid, "net/%s/bssid", iface);
-		if (curr_bssid[0]) {
+		if (self_ap) {
+			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
+			publish_value("", "net/%s/level", iface);
+			publish_value(ssid, "net/%s/ssid", iface);
+		} else if (curr_bssid[0]) {
 			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
 			struct ap *ap = find_ap_by_bssid(curr_bssid);
 			if (ap) {
