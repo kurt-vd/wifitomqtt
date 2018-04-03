@@ -362,7 +362,7 @@ static void wpa_recvd_pkt(char *line)
 	nl = strchr(line, '\n');
 	mylog(LOG_DEBUG, "< %.*s%s", (int)(nl ? nl - line : strlen(line)), line, nl ? " ..." : "");
 
-	if (!mystrncmp("<2>", line) || !mystrncmp("<3>", line)) {
+	if (!mystrncmp("<2>", line) || !mystrncmp("<3>", line) || !mystrncmp("<4>", line)) {
 		/* publish line+3 to mqtt log */
 		publish_value(line+3, "tmp/%s/wpa", iface);
 		tok = strtok(line+3, " \t");
@@ -370,6 +370,10 @@ static void wpa_recvd_pkt(char *line)
 			wpa_send("STATUS");
 		} else if (!strcmp(tok, "CTRL-EVENT-DISCONNECTED")) {
 			wpa_send("STATUS");
+		} else if (!strcmp(tok, "AP-ENABLED")) {
+			mylog(LOG_NOTICE, "AP mode");
+		} else if (!strcmp(tok, "AP-DISABLED")) {
+			mylog(LOG_NOTICE, "Station mode");
 		} else if (!strcmp(tok, "CTRL-EVENT-BSS-ADDED")) {
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
