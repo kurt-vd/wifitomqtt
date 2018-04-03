@@ -215,7 +215,7 @@ static inline void sort_networks(void)
 	qsort(networks, nnetworks, sizeof(*networks), networkcmp);
 }
 
-struct ap {
+struct bss {
 	char bssid[20];
 	char *ssid;
 	int freq;
@@ -226,70 +226,70 @@ struct ap {
 		#define BF_PRESENT	0x04 /* for re-adding */
 };
 
-static struct ap *aps;
-static int naps, saps;
+static struct bss *bsss;
+static int nbsss, sbsss;
 
-static int apbssidcmp(const void *a, const void *b)
+static int bssidcmp(const void *a, const void *b)
 {
-	const struct ap *aap = a, *bap = b;
+	const struct bss *bssa = a, *bssb = b;
 
-	return strcmp(aap->bssid, bap->bssid);
+	return strcmp(bssa->bssid, bssb->bssid);
 }
 
-static struct ap *find_ap_by_bssid(const char *bssid)
+static struct bss *find_ap_by_bssid(const char *bssid)
 {
-	struct ap needle;
+	struct bss needle;
 
 	if (!bssid)
 		return NULL;
 
 	strncpy(needle.bssid, bssid, sizeof(needle.bssid));
-	return bsearch(&needle, aps, naps, sizeof(*aps), apbssidcmp);
+	return bsearch(&needle, bsss, nbsss, sizeof(*bsss), bssidcmp);
 }
 
 static void add_ap(const char *bssid, int freq, int level, const char *flags, const char *ssid)
 {
-	struct ap *ap;
+	struct bss *bss;
 
-	if (naps+1 > saps) {
-		saps += 16;
-		aps = realloc(aps, sizeof(*aps)*saps);
-		if (!aps)
-			mylog(LOG_ERR, "realloc %i aps: %s", saps, ESTR(errno));
+	if (nbsss+1 > sbsss) {
+		sbsss += 16;
+		bsss = realloc(bsss, sizeof(*bsss)*sbsss);
+		if (!bsss)
+			mylog(LOG_ERR, "realloc %i bsss: %s", sbsss, ESTR(errno));
 	}
-	ap = &aps[naps++];
-	memset(ap, 0, sizeof(*ap));
-	strncpy(ap->bssid, bssid, sizeof(ap->bssid));
-	ap->freq = freq;
-	ap->level = level;
+	bss = &bsss[nbsss++];
+	memset(bss, 0, sizeof(*bss));
+	strncpy(bss->bssid, bssid, sizeof(bss->bssid));
+	bss->freq = freq;
+	bss->level = level;
 	/* TODO: flags */
 	if (ssid) {
-		ap->ssid = strdup(ssid);
+		bss->ssid = strdup(ssid);
 		if (find_network_by_ssid(ssid))
-			ap->flags |= BF_KNOWN;
+			bss->flags |= BF_KNOWN;
 	}
-	qsort(aps, naps, sizeof(*aps), apbssidcmp);
+	qsort(bsss, nbsss, sizeof(*bsss), bssidcmp);
 }
 
-static void remove_ap(struct ap *ap)
+static void remove_ap(struct bss *bss)
 {
-	if (!ap)
+	if (!bss)
 		return;
 	/* handle memory */
-	myfree(ap->ssid);
+	myfree(bss->ssid);
 
 	/* remove element */
-	int idx = ap - aps;
-	if (idx != naps-1)
-		memcpy(ap, ap+1, (naps-1-idx)*sizeof(*aps));
-	--naps;
+	int idx = bss - bsss;
+	if (idx != nbsss-1)
+		memcpy(bss, bss+1, (nbsss-1-idx)*sizeof(*bsss));
+	--nbsss;
 }
 
 static void hide_ap_mqtt(const char *bssid)
 {
-	publish_value("", "net/%s/ap/%s/freq", iface, bssid);
-	publish_value("", "net/%s/ap/%s/level", iface, bssid);
-	publish_value("", "net/%s/ap/%s/ssid", iface, bssid);
+	publish_value("", "net/%s/bss/%s/freq", iface, bssid);
+	publish_value("", "net/%s/bss/%s/level", iface, bssid);
+	publish_value("", "net/%s/bss/%s/ssid", iface, bssid);
 }
 
 /* wpa functions */
@@ -414,13 +414,13 @@ static void wpa_recvd_pkt(char *line)
 		sort_networks();
 
 	} else if (!strcmp(head->a, "SCAN_RESULTS")) {
-		/* clear BF_PRESENT flag in ap list */
-		for (j = 0; j < naps; ++j)
-			aps[j].flags &= ~BF_PRESENT;
+		/* clear BF_PRESENT flag in bss list */
+		for (j = 0; j < nbsss; ++j)
+			bsss[j].flags &= ~BF_PRESENT;
 
 		/* parse lines */
 		char *bssid;
-		struct ap *ap;
+		struct bss *bss;
 		for (line = strtok_r(line, "\r\n", &saveptr); line;
 				line = strtok_r(NULL, "\r\n", &saveptr)) {
 			if (!mystrncmp("bssid", line))
@@ -429,19 +429,19 @@ static void wpa_recvd_pkt(char *line)
 			bssid = strtok(line, "\t");
 			/* process like 'hot-detected' bssid's */
 			wpa_send("BSS %s", bssid);
-			ap = find_ap_by_bssid(bssid);
-			/* mark ap as present */
-			if (ap)
-				ap->flags |= BF_PRESENT;
+			bss = find_ap_by_bssid(bssid);
+			/* mark bss as present */
+			if (bss)
+				bss->flags |= BF_PRESENT;
 		}
-		for (j = 0; j < naps; ) {
-			if (aps[j].flags & BF_PRESENT) {
+		for (j = 0; j < nbsss; ) {
+			if (bsss[j].flags & BF_PRESENT) {
 				++j;
 				continue;
 			}
-			/* remove this ap */
-			hide_ap_mqtt(aps[j].bssid);
-			remove_ap(aps+j);
+			/* remove this bss */
+			hide_ap_mqtt(bsss[j].bssid);
+			remove_ap(bsss+j);
 		}
 
 	} else if (!mystrncmp("BSS ", head->a)) {
@@ -467,16 +467,16 @@ static void wpa_recvd_pkt(char *line)
 			else if (!strcmp(tok, "ssid"))
 				ssid = val;
 		}
-		struct ap *ap;
+		struct bss *bss;
 
-		ap = find_ap_by_bssid(bssid);
-		if (ap) {
-			if (ap->freq != freq)
-				publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
-			if (ap->level != level)
-				publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
-			ap->freq = freq;
-			ap->level = level;
+		bss = find_ap_by_bssid(bssid);
+		if (bss) {
+			if (bss->freq != freq)
+				publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
+			if (bss->level != level)
+				publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
+			bss->freq = freq;
+			bss->level = level;
 			if (!self_ap && !strcmp(curr_bssid, bssid ?: "")) {
 				if (level != curr_level)
 					publish_value(valuetostr("%i", level), "net/%s/level", iface);
@@ -484,9 +484,9 @@ static void wpa_recvd_pkt(char *line)
 			}
 		} else if (bssid) {
 			add_ap(bssid, freq, level, flags, ssid);
-			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
-			publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
-			publish_value(ssid, "net/%s/ap/%s/ssid", iface, bssid);
+			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
+			publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
+			publish_value(ssid, "net/%s/bss/%s/ssid", iface, bssid);
 		}
 	} else if (!strcmp("STATUS", head->a)) {
 		char *val;
@@ -514,11 +514,11 @@ static void wpa_recvd_pkt(char *line)
 			publish_value(ssid, "net/%s/ssid", iface);
 		} else if (curr_bssid[0]) {
 			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
-			struct ap *ap = find_ap_by_bssid(curr_bssid);
-			if (ap) {
-				if (curr_level != ap->level)
-					publish_value(valuetostr("%i", ap->level), "net/%s/level", iface);
-				curr_level = ap->level;
+			struct bss *bss = find_ap_by_bssid(curr_bssid);
+			if (bss) {
+				if (curr_level != bss->level)
+					publish_value(valuetostr("%i", bss->level), "net/%s/level", iface);
+				curr_level = bss->level;
 			}
 			publish_value(ssid, "net/%s/ssid", iface);
 		} else {
@@ -807,10 +807,10 @@ int main(int argc, char *argv[])
 	}
 
 	/* clean scan results in mqtt */
-	for (j = 0; j < naps; ++j) {
-		publish_value("", "net/%s/ap/%s/freq", iface, aps[j].bssid);
-		publish_value("", "net/%s/ap/%s/level", iface, aps[j].bssid);
-		publish_value("", "net/%s/ap/%s/ssid", iface, aps[j].bssid);
+	for (j = 0; j < nbsss; ++j) {
+		publish_value("", "net/%s/bss/%s/freq", iface, bsss[j].bssid);
+		publish_value("", "net/%s/bss/%s/level", iface, bsss[j].bssid);
+		publish_value("", "net/%s/bss/%s/ssid", iface, bsss[j].bssid);
 	}
 	publish_value("", "net/%s/bssid", iface);
 	publish_value("", "net/%s/freq", iface);
@@ -827,9 +827,9 @@ int main(int argc, char *argv[])
 
 #if 0
 	/* free memory */
-	for (j = 0; j < naps; ++j)
-		myfree(aps[j].ssid);
-	myfree(aps);
+	for (j = 0; j < nbsss; ++j)
+		myfree(bsss[j].ssid);
+	myfree(bsss);
 	for (j = 0; j < nnetworks; ++j) {
 		myfree(networks[j].ssid);
 		myfree(networks[j].psk);
