@@ -773,11 +773,13 @@ int main(int argc, char *argv[])
 			ret = recv(wpasock, line, sizeof(line)-1, 0);
 			if (ret < 0 && errno == EINTR)
 				continue;
-			if (ret < 0)
-				mylog(LOG_ERR, "recv wpa: %s", ESTR(errno));
+			if (ret < 0) {
+				mylog(LOG_WARNING, "recv wpa: %s", ESTR(errno));
+				break;
+			}
 			if (!ret) {
 				mylog(LOG_WARNING, "wpa closed");
-				break;
+				//break;
 			}
 			line[ret] = 0;
 			wpa_recvd_pkt(line);
@@ -785,17 +787,22 @@ int main(int argc, char *argv[])
 		if (pf[1].revents) {
 			/* mqtt read ... */
 			ret = mosquitto_loop_read(mosq, 1);
-			if (ret)
-				mylog(LOG_ERR, "mosquitto_loop_read: %s", mosquitto_strerror(ret));
+			if (ret) {
+				mylog(LOG_WARNING, "mosquitto_loop_read: %s", mosquitto_strerror(ret));
+				break;
+			}
 		}
 		/* mosquitto things to do each iteration */
 		ret = mosquitto_loop_misc(mosq);
-		if (ret)
-			mylog(LOG_ERR, "mosquitto_loop_misc: %s", mosquitto_strerror(ret));
+		if (ret) {
+			mylog(LOG_WARNING, "mosquitto_loop_misc: %s", mosquitto_strerror(ret));
+			break;
+		}
 		if (mosquitto_want_write(mosq)) {
 			ret = mosquitto_loop_write(mosq, 1);
-			if (ret)
-				mylog(LOG_ERR, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
+			if (ret) {
+				mylog(LOG_WARNING, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
+			}
 		}
 	}
 
