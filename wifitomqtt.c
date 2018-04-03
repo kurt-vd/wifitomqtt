@@ -120,10 +120,10 @@ static void onsigterm(int signr)
 	sigterm = 1;
 }
 
-static void my_exit(void)
+static void myfree(void *dat)
 {
-	if (mosq)
-		mosquitto_disconnect(mosq);
+	if (dat)
+		free(dat);
 }
 
 /* WPA */
@@ -272,7 +272,7 @@ static void remove_ap(struct ap *ap)
 	if (!ap)
 		return;
 	/* handle memory */
-	free(ap->ssid);
+	myfree(ap->ssid);
 
 	/* remove element */
 	int idx = ap - aps;
@@ -390,7 +390,7 @@ static void wpa_recvd_pkt(char *line)
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
 		for (j = 0; j < nnetworks; ++j)
-			free(networks[j].ssid);
+			myfree(networks[j].ssid);
 		nnetworks = 0;
 
 		/* parse lines */
@@ -674,6 +674,7 @@ static void subscribe_topic(const char *topicfmt, ...)
 	ret = mosquitto_subscribe(mosq, NULL, topic, mqtt_qos);
 	if (ret < 0)
 		mylog(LOG_ERR, "mosquitto_subscribe %s: %s", topic, mosquitto_strerror(ret));
+	free(topic);
 }
 
 
@@ -717,7 +718,6 @@ int main(int argc, char *argv[])
 	}
 
 	setmylog(NAME, 0, LOG_LOCAL2, loglevel);
-	atexit(my_exit);
 	mysignal(SIGINT, onsigterm);
 	mysignal(SIGTERM, onsigterm);
 
@@ -806,5 +806,24 @@ int main(int argc, char *argv[])
 			mylog(LOG_ERR, "mosquitto_loop: %s", mosquitto_strerror(ret));
 	}
 
+#if 0
+	/* free memory */
+	for (j = 0; j < naps; ++j)
+		myfree(aps[j].ssid);
+	myfree(aps);
+	for (j = 0; j < nnetworks; ++j) {
+		myfree(networks[j].ssid);
+		myfree(networks[j].psk);
+	}
+	myfree(networks);
+
+	struct str *head;
+	for (head = pop_strq(); head; head = pop_strq())
+		free(head);
+
+	mosquitto_disconnect(mosq);
+	mosquitto_destroy(mosq);
+	mosquitto_lib_cleanup();
+#endif
 	return !sigterm;
 }
