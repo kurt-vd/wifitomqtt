@@ -443,11 +443,22 @@ static void wpa_recvd_pkt(char *line)
 			else if (!strcmp(tok, "ssid"))
 				ssid = val;
 		}
-		add_ap(bssid, freq, level, flags, ssid);
+		struct ap *ap;
 
-		publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
-		publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
-		publish_value(ssid, "net/%s/ap/%s/ssid", iface, bssid);
+		ap = find_ap_by_bssid(bssid);
+		if (ap) {
+			if (ap->freq != freq)
+				publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
+			if (ap->level != level)
+				publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
+			ap->freq = freq;
+			ap->level = level;
+		} else {
+			add_ap(bssid, freq, level, flags, ssid);
+			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/ap/%s/freq", iface, bssid);
+			publish_value(valuetostr("%i", level), "net/%s/ap/%s/level", iface, bssid);
+			publish_value(ssid, "net/%s/ap/%s/ssid", iface, bssid);
+		}
 	} else if (!strcmp("STATUS", head->a)) {
 		char *val;
 		char *bssid = NULL, *ssid = NULL;
