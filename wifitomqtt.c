@@ -550,11 +550,11 @@ static void wpa_recvd_pkt(char *line)
 				self_ap = !strcmp(val, "AP");
 		}
 		publish_value(curr_bssid, "net/%s/bssid", iface);
-		if (self_ap) {
+		if (freq && self_ap) {
 			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
 			publish_value("", "net/%s/level", iface);
 			publish_value(ssid, "net/%s/ssid", iface);
-		} else if (curr_bssid[0]) {
+		} else if (freq && curr_bssid[0]) {
 			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
 			struct bss *bss = find_ap_by_bssid(curr_bssid);
 			if (bss) {
