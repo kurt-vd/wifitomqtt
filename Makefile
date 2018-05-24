@@ -21,7 +21,7 @@ wifitomqtt: libet/libt.o common.o
 ifaddrtomqtt: libet/libt.o common.o
 
 install: $(PROGS)
-	$(foreach PROG, $(PROGS), install -vp -m 0777 $(INSTOPTS) $(PROG) $(DESTDIR)$(PREFIX)/bin/$(PROG);)
+	$(foreach PROG, $(PROGS), install -vpD -m 0777 $(INSTOPTS) $(PROG) $(DESTDIR)$(PREFIX)/bin/$(PROG);)
 
 clean:
 	rm -rf $(wildcard *.o libet/*.o) $(PROGS)
