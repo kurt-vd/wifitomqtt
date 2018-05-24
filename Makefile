@@ -1,4 +1,4 @@
-PROGS	= wifitomqtt
+PROGS	= wifitomqtt ifaddrtomqtt
 default	: $(PROGS)
 
 PREFIX	= /usr/local
@@ -17,6 +17,8 @@ VERSION := $(shell git describe --tags --always)
 CPPFLAGS += -DVERSION=\"$(VERSION)\"
 
 wifitomqtt: libet/libt.o common.o
+
+ifaddrtomqtt: libet/libt.o common.o
 
 install: $(PROGS)
 	$(foreach PROG, $(PROGS), install -vp -m 0777 $(INSTOPTS) $(PROG) $(DESTDIR)$(PREFIX)/bin/$(PROG);)

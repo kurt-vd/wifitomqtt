@@ -1,6 +1,7 @@
 # output
 *.o
 wifitomqtt
+ifaddrtomqtt
 
 # environment
 tags
