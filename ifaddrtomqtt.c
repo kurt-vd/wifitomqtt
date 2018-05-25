@@ -57,6 +57,7 @@ static const char help_msg[] =
 	" -v, --verbose		Be more verbose\n"
 	"\n"
 	" -h, --host=HOST[:PORT]Specify alternate MQTT host+port\n"
+	" -a, --all		Emit link-local and lo addresses too\n"
 	;
 
 #ifdef _GNU_SOURCE
@@ -66,6 +67,7 @@ static struct option long_opts[] = {
 	{ "verbose", no_argument, NULL, 'v', },
 
 	{ "host", required_argument, NULL, 'h', },
+	{ "all", no_argument, NULL, 'a', },
 
 	{ },
 };
@@ -73,7 +75,9 @@ static struct option long_opts[] = {
 #define getopt_long(argc, argv, optstring, longopts, longindex) \
 	getopt((argc), (argv), (optstring))
 #endif
-static const char optstring[] = "Vv?h:";
+static const char optstring[] = "Vv?h:a";
+
+static int emitall;
 
 /* signal handler */
 static volatile int sigterm;
@@ -213,14 +217,14 @@ static const char *addrtostr(const struct sockaddr *addr)
 		if (!inet_ntop(addr->sa_family, &((struct sockaddr_in *)addr)->sin_addr,
 				buf, sizeof(buf)-1))
 			return NULL;
-		if (!strncmp(buf, "169.254.", 8))
+		if (!emitall && !strncmp(buf, "169.254.", 8))
 			return NULL;
 		break;
 	case AF_INET6:
 		if (!inet_ntop(addr->sa_family, &((struct sockaddr_in6 *)addr)->sin6_addr,
 				buf, sizeof(buf)-1))
 			return NULL;
-		if (!strncmp(buf, "fe", 2))
+		if (!emitall && !strncmp(buf, "fe", 2))
 			return NULL;
 		break;
 	default:
@@ -251,6 +255,8 @@ static void publish_addrs(void *dat)
 	/* print results */
 	for (ptr = table; ptr; ptr = ptr->ifa_next) {
 		if (!ptr->ifa_addr)
+			continue;
+		if (!emitall && !strcmp(ptr->ifa_name, "lo"))
 			continue;
 		value = addrtostr(ptr->ifa_addr);
 		if (!value)
@@ -322,6 +328,9 @@ int main(int argc, char *argv[])
 			*str = 0;
 			mqtt_port = strtoul(str+1, NULL, 10);
 		}
+		break;
+	case 'a':
+		emitall = 1;
 		break;
 
 	default:
