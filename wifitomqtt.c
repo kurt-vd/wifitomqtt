@@ -223,6 +223,21 @@ static struct network *add_network(int num, const char *ssid)
 	return net;
 }
 
+static void remove_network(struct network *net)
+{
+	if (!net)
+		return;
+	/* handle memory */
+	myfree(net->ssid);
+	myfree(net->psk);
+
+	/* remove element */
+	int idx = net - networks;
+	if (idx != nnetworks-1)
+		memcpy(networks, networks+1, (nnetworks-1-idx)*sizeof(*networks));
+	--nnetworks;
+}
+
 static inline void sort_networks(void)
 {
 	qsort(networks, nnetworks, sizeof(*networks), networkcmp);
@@ -475,12 +490,13 @@ static void wpa_recvd_pkt(char *line)
 			else
 				net->flags &= ~BF_DISABLED;
 		}
+		if (flags != net->flags)
+			network_changed(net, net->ssid);
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
-		for (j = 0; j < nnetworks; ++j)
-			myfree(networks[j].ssid);
-		nnetworks = 0;
+		for (j = nnetworks; j > 0; --j)
+			remove_network(networks+j);
 
 		/* parse lines */
 		int id;
