@@ -171,7 +171,7 @@ struct network {
 	char *ssid;
 	char *psk;
 	int flags;
-#define NF_AP	0x01
+	/* use BF_ flags */
 };
 
 static struct network *networks;
@@ -282,8 +282,16 @@ static void sort_ap(void)
 
 static void compute_flags(struct bss *bss, const char *flags)
 {
-	if (bss->ssid && find_network_by_ssid(bss->ssid))
-		bss->flags |= BF_KNOWN;
+	const struct network *net = find_network_by_ssid(bss->ssid);
+
+	/* remove network related flags */
+	bss->flags = bss->flags & ~(BF_AP | BF_KNOWN);
+	/* add network related flags */
+	if (net)
+		/* plain copy of the flags */
+		bss->flags |= net->flags | BF_KNOWN;
+
+	/* add BSS related flags */
 	if (flags && strstr(flags, "WPA"))
 		bss->flags |= BF_WPA;
 	if (flags && strstr(flags, "WEP"))
@@ -454,9 +462,9 @@ static void wpa_recvd_pkt(char *line)
 			;
 		else if (!strcmp(name, "mode")) {
 			if (strtoul(line, NULL, 0) == 2)
-				net->flags |= NF_AP;
+				net->flags |= BF_AP;
 			else
-				net->flags &= ~NF_AP;
+				net->flags &= ~BF_AP;
 		}
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
@@ -622,7 +630,7 @@ static void wpa_recvd_pkt(char *line)
 			free(net->psk);
 			net->psk = NULL;
 		}
-		if (net->flags & NF_AP)
+		if (net->flags & BF_AP)
 			wpa_send("SET_NETWORK %i mode 2", id);
 		wpa_send("ENABLE_NETWORK %i", id);
 	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
@@ -705,7 +713,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		wpa_send("SCAN");
 	} else if (!strcmp(toks[2], "ap")) {
 		for (j = 0; j < nnetworks; ++j) {
-			if (!(networks[j].flags & NF_AP))
+			if (!(networks[j].flags & BF_AP))
 				continue;
 			wpa_send("SELECT_NETWORK %i", networks[j].id);
 			mylog(LOG_NOTICE, "ap: selected '%s'", networks[j].ssid);
@@ -746,12 +754,10 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		} else if (!strcmp(toks[3], "ap")) {
 			net = find_or_create_ssid(toks[2]);
 
-			if (strtoul(msg->payload ?: "", NULL, 0))
-				net->flags |= NF_AP;
-			else
-				net->flags &= ~NF_AP;
+			net->flags |= BF_AP;
 			if (net->id >= 0)
-				wpa_send("SET_NETWORK %i mode %i", net->id, (net->flags & NF_AP) ? 2 : 0);
+				wpa_send("SET_NETWORK %i mode %i", net->id, (net->flags & BF_AP) ? 2 : 0);
+
 		} else if (!strcmp(toks[3], "create")) {
 			if (!net)
 				net = find_or_create_ssid(toks[2]);
