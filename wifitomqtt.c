@@ -231,7 +231,7 @@ static void remove_network(struct network *net)
 	myfree(net->ssid);
 	myfree(net->psk);
 
-	/* remove element */
+	/* remove element, keep sorted */
 	int idx = net - networks;
 	if (idx != nnetworks-1)
 		memcpy(networks, networks+1, (nnetworks-1-idx)*sizeof(*networks));
@@ -298,17 +298,19 @@ static void sort_ap(void)
 	qsort(bsss, nbsss, sizeof(*bsss), bssidcmp);
 }
 
-static void compute_flags(struct bss *bss, const char *flags)
+static void compute_network_flags(struct bss *bss, const struct network *net)
 {
-	const struct network *net = find_network_by_ssid(bss->ssid);
-
 	/* remove network related flags */
 	bss->flags = bss->flags & ~(BF_AP | BF_KNOWN | BF_DISABLED);
 	/* add network related flags */
 	if (net)
 		/* plain copy of the flags */
 		bss->flags |= net->flags | BF_KNOWN;
+}
 
+static void compute_flags(struct bss *bss, const char *flags)
+{
+	bss->flags &= ~(BF_WPA | BF_WEP | BF_EAP);
 	/* add BSS related flags */
 	if (flags && strstr(flags, "WPA"))
 		bss->flags |= BF_WPA;
@@ -345,7 +347,7 @@ static void remove_ap(struct bss *bss)
 	/* handle memory */
 	myfree(bss->ssid);
 
-	/* remove element */
+	/* remove element, remain sorted */
 	int idx = bss - bsss;
 	if (idx != nbsss-1)
 		memcpy(bss, bss+1, (nbsss-1-idx)*sizeof(*bsss));
@@ -399,10 +401,44 @@ static void wpa_cmd_timeout(void *dat)
 
 static void wpa_keepalive(void *dat)
 {
+	/*
 	if (!self_ap && curr_bssid[0])
 		wpa_send("BSS %s", curr_bssid);
 	else
+	*/
 		wpa_send("PING");
+}
+
+/* set net to NULL to indicate removal network */
+static void network_changed(const struct network *net, const char *ssid)
+{
+	int j, flags;
+	struct bss *bss;
+
+	for (j = 0, bss = bsss; j < nbsss; ++j, ++bss) {
+		if (strcmp(bss->ssid, ssid ?: net->ssid))
+			continue;
+		flags = bss->flags;
+		compute_network_flags(bss, net);
+		if (flags != bss->flags)
+			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bss->bssid);
+	}
+}
+
+static void wpa_save_config(void)
+{
+	struct str *str;
+
+	for (str = strq; str; str = str->next) {
+		if (!mystrncmp("SET_NETWORK", str->a) ||
+				!mystrncmp("ENABLE_NETWORK", str->a) ||
+				!mystrncmp("DISABLE_NETWORK", str->a) ||
+				!mystrncmp("REMOVE_NETWORK", str->a) ||
+				!mystrncmp("ADD_NETWORK", str->a))
+			break;
+	}
+	if (!str)
+		wpa_send("SAVE_CONFIG");
 }
 
 static void wpa_recvd_pkt(char *line)
@@ -478,8 +514,10 @@ static void wpa_recvd_pkt(char *line)
 
 		net = find_network_by_id(id);
 		if (!net)
-			;
-		else if (!strcmp(name, "mode")) {
+			goto done;
+		int flags = net->flags;
+
+		if (!strcmp(name, "mode")) {
 			if (strtoul(line, NULL, 0) == 2)
 				net->flags |= BF_AP;
 			else
@@ -591,12 +629,13 @@ static void wpa_recvd_pkt(char *line)
 		} else if (bssid) {
 			struct bss *bss = add_ap(bssid, freq, level, ssid);
 
+			publish_value(ssid, "net/%s/bss/%s/ssid", iface, bssid);
 			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
 			publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
+			/* publish flags as last */
 			compute_flags(bss, flags);
+			compute_network_flags(bss, find_network_by_ssid(bss->ssid));
 			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
-			/* publish ssid as last */
-			publish_value(ssid, "net/%s/bss/%s/ssid", iface, bssid);
 			sort_ap();
 		}
 	} else if (!strcmp("STATUS", head->a)) {
@@ -635,7 +674,6 @@ static void wpa_recvd_pkt(char *line)
 		} else {
 			publish_value("", "net/%s/freq", iface);
 			publish_value("", "net/%s/level", iface);
-			publish_value("", "net/%s/flags", iface);
 			publish_value("", "net/%s/ssid", iface);
 			curr_level = 0;
 		}
@@ -659,21 +697,49 @@ static void wpa_recvd_pkt(char *line)
 		if (net->flags & BF_AP)
 			wpa_send("SET_NETWORK %i mode 2", id);
 		wpa_send("ENABLE_NETWORK %i", id);
-	} else if (!mystrncmp("SET_NETWORK ", head->a) ||
-			!mystrncmp("ENABLE_NETWORK ", head->a) ||
-			!mystrncmp("DISABLE_NETOWRK ", head->a) ||
-			!mystrncmp("REMOVE_NETWORK ", head->a)) {
-		struct str *str;
-		for (str = strq; str; str = str->next) {
-			if (!mystrncmp("SET_NETWORK", str->a) ||
-					!mystrncmp("ENABLE_NETWORK", str->a) ||
-					!mystrncmp("DISABLE_NETWORK", str->a) ||
-					!mystrncmp("REMOVE_NETWORK", str->a) ||
-					!mystrncmp("ADD_NETWORK", str->a))
-				break;
+
+	} else if (!mystrncmp("ENABLE_NETWORK all", head->a)) {
+		for (j = 0; j < nnetworks; ++j) {
+			if (networks[j].flags & BF_DISABLED) {
+				networks[j].flags &= ~BF_DISABLED;
+				network_changed(&networks[j], networks[j].ssid);
+			}
 		}
-		if (!str)
-			wpa_send("SAVE_CONFIG");
+		wpa_save_config();
+
+	} else if (!mystrncmp("ENABLE_NETWORK ", head->a)) {
+		int idx = strtoul(head->a + 15, NULL, 0);
+		struct network *net = find_network_by_id(idx);
+
+		if (net) {// && (net->flags & BF_DISABLED)) {
+			net->flags &= ~BF_DISABLED;
+			network_changed(net, net->ssid);
+			wpa_save_config();
+		}
+
+	} else if (!mystrncmp("DISABLE_NETWORK ", head->a)) {
+		int idx = strtoul(head->a + 16, NULL, 0);
+		struct network *net = find_network_by_id(idx);
+
+		if (net) {// && !(net->flags & BF_DISABLED)) {
+			net->flags |= BF_DISABLED;
+			network_changed(net, net->ssid);
+			wpa_save_config();
+		}
+
+	} else if (!mystrncmp("REMOVE_NETWORK ", head->a)) {
+		int idx = strtoul(head->a + 15, NULL, 0);
+		struct network *net = find_network_by_id(idx);
+
+		if (net) {
+			network_changed(NULL, net->ssid);
+			wpa_save_config();
+			remove_network(net);
+		}
+
+	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
+		wpa_save_config();
+
 	} else if (!strcmp("PING", head->a)) {
 		/* ignore */
 	} else {
@@ -766,12 +832,29 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 					mylog(LOG_INFO, "selected unknown network '%s'", (char *)msg->payload ?: "");
 			} else
 				wpa_send("ENABLE_NETWORK all");
+
+		} else if (!strcmp(toks[3], "enable")) {
+			net = find_network_by_ssid((char *)msg->payload);
+
+			if (net) {
+				net->flags &= ~BF_DISABLED;
+				wpa_send("ENABLE_NETWORK %i", net->id);
+			}
+
+		} else if (!strcmp(toks[3], "disable")) {
+			net = find_network_by_ssid((char *)msg->payload);
+
+			if (net) {
+				net->flags |= BF_DISABLED;
+				wpa_send("DISABLE_NETWORK %i", net->id);
+			}
+
 		} else if (!strcmp(toks[3], "remove")) {
 			net = find_network_by_ssid((char *)msg->payload);
 
 			if (net) {
+				net->flags &= BF_KNOWN;
 				wpa_send("REMOVE_NETWORK %i", net->id);
-				wpa_send("LIST_NETWORKS");
 			}
 		} else if (!strcmp(toks[3], "psk")) {
 			/* ssid is first line of payload */
