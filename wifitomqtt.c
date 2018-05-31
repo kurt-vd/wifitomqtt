@@ -232,13 +232,30 @@ struct bss {
 	int freq;
 	int level;
 	int flags;
-		#define BF_WPA		0x01
-		#define BF_KNOWN	0x02
-		#define BF_PRESENT	0x04 /* for re-adding */
+		#define BF_WPA		0x01 /* 'w' */
+		#define BF_WEP		0x02 /* 'W' */
+		#define BF_EAP		0x04 /* 'e' */
+		#define BF_KNOWN	0x08 /* 'k' */
+		#define BF_AP		0x10 /* 'a' is accesspoint mode */
+		#define BF_PRESENT	0x20 /* for re-adding */
 };
 
 static struct bss *bsss;
 static int nbsss, sbsss;
+
+static const char *bssflagsstr(const struct bss *bss)
+{
+	static char buf[16];
+	char *str;
+	int mask;
+	static const char indicators[] = "wWeka";
+	const char *pind;
+
+	str = buf;
+	for (mask = 1, pind = indicators; *pind; ++pind, mask <<= 1)
+		*str++ = (bss->flags & mask) ? *pind : '-';
+	return buf;
+}
 
 static int bssidcmp(const void *a, const void *b)
 {
@@ -263,7 +280,19 @@ static void sort_ap(void)
 	qsort(bsss, nbsss, sizeof(*bsss), bssidcmp);
 }
 
-static struct bss *add_ap(const char *bssid, int freq, int level, const char *flags, const char *ssid)
+static void compute_flags(struct bss *bss, const char *flags)
+{
+	if (bss->ssid && find_network_by_ssid(bss->ssid))
+		bss->flags |= BF_KNOWN;
+	if (flags && strstr(flags, "WPA"))
+		bss->flags |= BF_WPA;
+	if (flags && strstr(flags, "WEP"))
+		bss->flags |= BF_WEP;
+	if (flags && strstr(flags, "EAP"))
+		bss->flags |= BF_EAP;
+}
+
+static struct bss *add_ap(const char *bssid, int freq, int level, const char *ssid)
 {
 	struct bss *bss;
 
@@ -278,12 +307,8 @@ static struct bss *add_ap(const char *bssid, int freq, int level, const char *fl
 	strncpy(bss->bssid, bssid, sizeof(bss->bssid));
 	bss->freq = freq;
 	bss->level = level;
-	/* TODO: flags */
-	if (ssid) {
+	if (ssid)
 		bss->ssid = strdup(ssid);
-		if (find_network_by_ssid(ssid))
-			bss->flags |= BF_KNOWN;
-	}
 	return bss;
 }
 
@@ -305,6 +330,7 @@ static void hide_ap_mqtt(const char *bssid)
 {
 	publish_value("", "net/%s/bss/%s/freq", iface, bssid);
 	publish_value("", "net/%s/bss/%s/level", iface, bssid);
+	publish_value("", "net/%s/bss/%s/flags", iface, bssid);
 	publish_value("", "net/%s/bss/%s/ssid", iface, bssid);
 }
 
@@ -524,11 +550,18 @@ static void wpa_recvd_pkt(char *line)
 					publish_value(valuetostr("%i", level), "net/%s/level", iface);
 				curr_level = level;
 			}
+			int savedflags = bss->flags;
+			compute_flags(bss, flags);
+			if (savedflags != bss->flags)
+				publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
 		} else if (bssid) {
-			struct bss *bss = add_ap(bssid, freq, level, flags, ssid);
+			struct bss *bss = add_ap(bssid, freq, level, ssid);
 
 			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
 			publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
+			compute_flags(bss, flags);
+			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
+			/* publish ssid as last */
 			publish_value(ssid, "net/%s/bss/%s/ssid", iface, bssid);
 			sort_ap();
 		}
@@ -867,6 +900,7 @@ int main(int argc, char *argv[])
 		publish_value("", "net/%s/bss/%s/freq", iface, bsss[j].bssid);
 		publish_value("", "net/%s/bss/%s/level", iface, bsss[j].bssid);
 		publish_value("", "net/%s/bss/%s/ssid", iface, bsss[j].bssid);
+		publish_value("", "net/%s/bss/%s/flags", iface, bsss[j].bssid);
 	}
 	publish_value("", "net/%s/bssid", iface);
 	publish_value("", "net/%s/freq", iface);
