@@ -258,7 +258,12 @@ static struct bss *find_ap_by_bssid(const char *bssid)
 	return bsearch(&needle, bsss, nbsss, sizeof(*bsss), bssidcmp);
 }
 
-static void add_ap(const char *bssid, int freq, int level, const char *flags, const char *ssid)
+static void sort_ap(void)
+{
+	qsort(bsss, nbsss, sizeof(*bsss), bssidcmp);
+}
+
+static struct bss *add_ap(const char *bssid, int freq, int level, const char *flags, const char *ssid)
 {
 	struct bss *bss;
 
@@ -279,7 +284,7 @@ static void add_ap(const char *bssid, int freq, int level, const char *flags, co
 		if (find_network_by_ssid(ssid))
 			bss->flags |= BF_KNOWN;
 	}
-	qsort(bsss, nbsss, sizeof(*bsss), bssidcmp);
+	return bss;
 }
 
 static void remove_ap(struct bss *bss)
@@ -383,6 +388,7 @@ static void wpa_recvd_pkt(char *line)
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
 			remove_ap(find_ap_by_bssid(tok));
+			sort_ap();
 			hide_ap_mqtt(tok);
 			have_bss_events = 1;
 		} else if (!strcmp(tok, "CTRL-EVENT-SCAN-RESULTS")) {
@@ -478,6 +484,7 @@ static void wpa_recvd_pkt(char *line)
 			hide_ap_mqtt(bsss[j].bssid);
 			remove_ap(bsss+j);
 		}
+		sort_ap();
 
 	} else if (!mystrncmp("BSS ", head->a)) {
 		char *bssid = NULL;
@@ -518,10 +525,12 @@ static void wpa_recvd_pkt(char *line)
 				curr_level = level;
 			}
 		} else if (bssid) {
-			add_ap(bssid, freq, level, flags, ssid);
+			struct bss *bss = add_ap(bssid, freq, level, flags, ssid);
+
 			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
 			publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
 			publish_value(ssid, "net/%s/bss/%s/ssid", iface, bssid);
+			sort_ap();
 		}
 	} else if (!strcmp("STATUS", head->a)) {
 		char *val;
@@ -589,6 +598,7 @@ static void wpa_recvd_pkt(char *line)
 			if (!mystrncmp("SET_NETWORK", str->a) ||
 					!mystrncmp("ENABLE_NETWORK", str->a) ||
 					!mystrncmp("DISABLE_NETWORK", str->a) ||
+					!mystrncmp("REMOVE_NETWORK", str->a) ||
 					!mystrncmp("ADD_NETWORK", str->a))
 				break;
 		}
