@@ -643,7 +643,10 @@ static void wpa_recvd_pkt(char *line)
 		if (net->flags & BF_AP)
 			wpa_send("SET_NETWORK %i mode 2", id);
 		wpa_send("ENABLE_NETWORK %i", id);
-	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
+	} else if (!mystrncmp("SET_NETWORK ", head->a) ||
+			!mystrncmp("ENABLE_NETWORK ", head->a) ||
+			!mystrncmp("DISABLE_NETOWRK ", head->a) ||
+			!mystrncmp("REMOVE_NETWORK ", head->a)) {
 		struct str *str;
 		for (str = strq; str; str = str->next) {
 			if (!mystrncmp("SET_NETWORK", str->a) ||
