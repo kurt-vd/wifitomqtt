@@ -671,6 +671,20 @@ static int wpa_connect(const char *iface)
 }
 
 /* MQTT API */
+static struct network *find_or_create_ssid(const char *ssid)
+{
+	struct network *net;
+
+	net = find_network_by_ssid(ssid);
+	if (!net) {
+		wpa_send("ADD_NETWORK");
+		net = add_network(-1, ssid);
+		sort_networks();
+		net = find_network_by_ssid(ssid);
+	}
+	return net;
+}
+
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
 	int ret, j;
@@ -710,26 +724,40 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 				mylog(LOG_INFO, "selected unknown network '%s'", (char *)msg->payload ?: "");
 		} else
 			wpa_send("ENABLE_NETWORK all");
-	} else if (ntoks >= 4 && !strcmp(toks[3], "psk")) {
-		struct network *net;
+	} else if (ntoks >= 5 && !strcmp(toks[2], "ssid")) {
+		struct network *net = find_network_by_ssid(toks[4]);
 
-		net = find_network_by_ssid(toks[2]);
-		if (!net) {
-			if (newnetwork) {
-				/* too rapid */
-				mylog(LOG_WARNING, "previous new ssid still pending");
-				return;
+		if (!strcmp(toks[3], "remove")) {
+			if (net) {
+				wpa_send("REMOVE_NETWORK %i", net->id);
+				wpa_send("LIST_NETWORKS");
 			}
-			wpa_send("ADD_NETWORK");
-			net = add_network(-1, toks[2]);
-			net->psk = strndup(msg->payload, msg->payloadlen);
-			sort_networks();
-			/* sorting invalidates 'net' pointer */
-			newnetwork = find_network_by_ssid(toks[2]);
-		} else {
-			wpa_send("SET_NETWORK %i psk %s", net->id, (char *)msg->payload);
+		} else if (!strcmp(toks[3], "psk")) {
+			net = find_or_create_ssid(toks[2]);
+
+			if (net->id >= 0)
+				wpa_send("SET_NETWORK %i psk %.*s", net->id, msg->payloadlen, (char *)msg->payload);
+			else {
+				myfree(net->psk);
+				net->psk = strndup(msg->payload, msg->payloadlen);
+			}
+		} else if (!strcmp(toks[3], "wep")) {
+			/* TODO */
+		} else if (!strcmp(toks[3], "ap")) {
+			net = find_or_create_ssid(toks[2]);
+
+			if (strtoul(msg->payload ?: "", NULL, 0))
+				net->flags |= NF_AP;
+			else
+				net->flags &= ~NF_AP;
+			if (net->id >= 0)
+				wpa_send("SET_NETWORK %i mode %i", net->id, (net->flags & NF_AP) ? 2 : 0);
+		} else if (!strcmp(toks[3], "create")) {
+			if (!net)
+				net = find_or_create_ssid(toks[2]);
 		}
 	}
+done:
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
 }
 
