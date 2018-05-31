@@ -484,7 +484,8 @@ static void wpa_recvd_pkt(char *line)
 			id = strtoul(strtok(line, "\t"), NULL, 0);
 			ssid = strtok(NULL, "\t");
 			add_network(id, ssid);
-			wpa_send("GET_NETWORK %i mode", networks[j].id);
+			wpa_send("GET_NETWORK %i mode", id);
+			wpa_send("GET_NETWORK %i disabled", id);
 		}
 		sort_networks();
 
