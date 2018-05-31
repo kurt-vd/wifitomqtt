@@ -448,8 +448,9 @@ static void wpa_recvd_pkt(char *line)
 		mylog(LOG_NOTICE, "wpa connected");
 
 		wpa_send("LIST_NETWORKS");
-		wpa_send("SCAN");
+		wpa_send("SCAN_RESULTS");
 		wpa_send("STATUS");
+		wpa_send("SCAN");
 
 	} else if (!mystrncmp("GET_NETWORK ", head->a)) {
 		int id;
