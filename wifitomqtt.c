@@ -238,8 +238,9 @@ struct bss {
 		#define BF_WEP		0x02 /* 'W' */
 		#define BF_EAP		0x04 /* 'e' */
 		#define BF_KNOWN	0x08 /* 'k' */
-		#define BF_AP		0x10 /* 'a' is accesspoint mode */
-		#define BF_PRESENT	0x20 /* for re-adding */
+		#define BF_DISABLED	0x10 /* 'd' */
+		#define BF_AP		0x20 /* 'a' is accesspoint mode */
+		#define BF_PRESENT	0x40 /* for re-adding */
 };
 
 static struct bss *bsss;
@@ -250,7 +251,7 @@ static const char *bssflagsstr(const struct bss *bss)
 	static char buf[16];
 	char *str;
 	int mask;
-	static const char indicators[] = "wWeka";
+	static const char indicators[] = "wWekda";
 	const char *pind;
 
 	str = buf;
@@ -287,7 +288,7 @@ static void compute_flags(struct bss *bss, const char *flags)
 	const struct network *net = find_network_by_ssid(bss->ssid);
 
 	/* remove network related flags */
-	bss->flags = bss->flags & ~(BF_AP | BF_KNOWN);
+	bss->flags = bss->flags & ~(BF_AP | BF_KNOWN | BF_DISABLED);
 	/* add network related flags */
 	if (net)
 		/* plain copy of the flags */
@@ -467,6 +468,11 @@ static void wpa_recvd_pkt(char *line)
 				net->flags |= BF_AP;
 			else
 				net->flags &= ~BF_AP;
+		} else if (!strcmp(name, "disabled")) {
+			if (strtoul(line, NULL, 0))
+				net->flags |= BF_DISABLED;
+			else
+				net->flags &= ~BF_DISABLED;
 		}
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
