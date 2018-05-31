@@ -190,6 +190,8 @@ static struct network *find_network_by_ssid(const char *ssid)
 		.ssid = (char *)ssid,
 	};
 
+	if (!ssid)
+		return NULL;
 	return bsearch(&needle, networks, nnetworks, sizeof(*networks), networkcmp);
 }
 
@@ -721,47 +723,50 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			goto done;
 		}
 		mylog(LOG_NOTICE, "ap: no network configured");
-	} else if (!strcmp(toks[2], "ssid") && ntoks >= 4 && !strcmp(toks[3], "set")) {
-		/* select new ssid. Do this only for new msgs (!retained) */
-		if (msg->payloadlen && strcmp(msg->payload, "all")) {
-			struct network *net;
+	} else if (!strcmp(toks[2], "ssid") && ntoks >= 4) {
+		struct network *net;
 
-			net = find_network_by_ssid(msg->payload ?: "");
-			if (net)
-				wpa_send("SELECT_NETWORK %i", net->id);
-			else
-				mylog(LOG_INFO, "selected unknown network '%s'", (char *)msg->payload ?: "");
-		} else
-			wpa_send("ENABLE_NETWORK all");
-	} else if (ntoks >= 5 && !strcmp(toks[2], "ssid")) {
-		struct network *net = find_network_by_ssid(toks[4]);
+		if (!strcmp(toks[3], "set")) {
+			/* select new ssid. Do this only for new msgs (!retained) */
+			if (msg->payloadlen && strcmp(msg->payload, "all")) {
+				struct network *net;
 
-		if (!strcmp(toks[3], "remove")) {
+				net = find_network_by_ssid(msg->payload ?: "");
+				if (net)
+					wpa_send("SELECT_NETWORK %i", net->id);
+				else
+					mylog(LOG_INFO, "selected unknown network '%s'", (char *)msg->payload ?: "");
+			} else
+				wpa_send("ENABLE_NETWORK all");
+		} else if (!strcmp(toks[3], "remove")) {
+			net = find_network_by_ssid((char *)msg->payload);
+
 			if (net) {
 				wpa_send("REMOVE_NETWORK %i", net->id);
 				wpa_send("LIST_NETWORKS");
 			}
 		} else if (!strcmp(toks[3], "psk")) {
-			net = find_or_create_ssid(toks[2]);
+			/* ssid is first line of payload */
+			net = find_or_create_ssid(strtok((char *)msg->payload, "\n\r"));
+			char *psk = strtok(NULL, "\n\r");
 
 			if (net->id >= 0)
-				wpa_send("SET_NETWORK %i psk %.*s", net->id, msg->payloadlen, (char *)msg->payload);
+				wpa_send("SET_NETWORK %i psk %s", net->id, psk);
 			else {
 				myfree(net->psk);
-				net->psk = strndup(msg->payload, msg->payloadlen);
+				net->psk = strdup(psk);
 			}
 		} else if (!strcmp(toks[3], "wep")) {
 			/* TODO */
 		} else if (!strcmp(toks[3], "ap")) {
-			net = find_or_create_ssid(toks[2]);
+			net = find_or_create_ssid((char *)msg->payload);
 
 			net->flags |= BF_AP;
 			if (net->id >= 0)
 				wpa_send("SET_NETWORK %i mode %i", net->id, (net->flags & BF_AP) ? 2 : 0);
 
 		} else if (!strcmp(toks[3], "create")) {
-			if (!net)
-				net = find_or_create_ssid(toks[2]);
+			find_or_create_ssid((char *)msg->payload);
 		}
 	}
 done:
