@@ -658,6 +658,8 @@ static void wpa_recvd_pkt(char *line)
 		}
 		if (!str)
 			wpa_send("SAVE_CONFIG");
+	} else if (!strcmp("PING", head->a)) {
+		/* ignore */
 	} else {
 		mylog(LOG_INFO, "'%.20s' OK", head->a);
 	}
