@@ -486,6 +486,8 @@ static void wpa_recvd_pkt(char *line)
 			set_wifi_state("AP");
 		} else if (!strcmp(tok, "AP-DISABLED")) {
 			self_ap = 0;
+			/* issue scan request immediately */
+			wpa_send("SCAN");
 		} else if (!strcmp(tok, "CTRL-EVENT-BSS-ADDED")) {
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
