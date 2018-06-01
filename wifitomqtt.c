@@ -170,6 +170,8 @@ struct network {
 	int id;
 	char *ssid;
 	char *psk;
+	int netflags;
+#define NF_SEL	0x01
 	int flags;
 	/* use BF_ flags */
 };
@@ -697,6 +699,8 @@ static void wpa_recvd_pkt(char *line)
 		if (net->flags & BF_AP)
 			wpa_send("SET_NETWORK %i mode 2", id);
 		wpa_send("ENABLE_NETWORK %i", id);
+		if (net->netflags & NF_SEL)
+			wpa_send("SELECT_NETWORK %i", id);
 
 	} else if (!mystrncmp("ENABLE_NETWORK all", head->a)) {
 		for (j = 0; j < nnetworks; ++j) {
@@ -826,8 +830,10 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 				struct network *net;
 
 				net = find_network_by_ssid(msg->payload ?: "");
-				if (net)
+				if (net && net->id > 0)
 					wpa_send("SELECT_NETWORK %i", net->id);
+				else if (net)
+					net->netflags |= NF_SEL;
 				else
 					mylog(LOG_INFO, "selected unknown network '%s'", (char *)msg->payload ?: "");
 			} else
