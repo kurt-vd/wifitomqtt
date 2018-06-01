@@ -434,6 +434,7 @@ static void wpa_save_config(void)
 		if (!mystrncmp("SET_NETWORK", str->a) ||
 				!mystrncmp("ENABLE_NETWORK", str->a) ||
 				!mystrncmp("DISABLE_NETWORK", str->a) ||
+				!mystrncmp("SELECT_NETWORK", str->a) ||
 				!mystrncmp("REMOVE_NETWORK", str->a) ||
 				!mystrncmp("ADD_NETWORK", str->a))
 			break;
@@ -741,6 +742,9 @@ static void wpa_recvd_pkt(char *line)
 		}
 
 	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
+		wpa_save_config();
+
+	} else if (!mystrncmp("SELECT_NETWORK ", head->a)) {
 		wpa_save_config();
 
 	} else if (!strcmp("PING", head->a)) {
