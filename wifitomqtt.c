@@ -552,6 +552,35 @@ static void wpa_recvd_pkt(char *line)
 		if (flags != net->flags)
 			network_changed(net, 0);
 
+	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
+		int id;
+		char *prop, *value;
+		struct network *net;
+
+		strtok(head->a, " "); /* pop SET_NETWORK */
+		id = strtoul(strtok(NULL, " ") ?: "-1", NULL, 0);
+		prop = strtok(NULL, " ") ?: "";
+		value = strtok(NULL, " ") ?: "";
+
+		net = find_network_by_id(id);
+		if (!net)
+			goto done;
+
+		int flags = net->flags;
+		if (!strcmp(prop, "mode")) {
+			if (!strcmp(value, "2"))
+				net->flags |= BF_AP;
+			else
+				net->flags &= ~BF_AP;
+		} else if (!strcmp(prop, "disabled")) {
+			if (!strcmp(value, "1"))
+				net->flags |= BF_DISABLED;
+			else
+				net->flags &= ~BF_DISABLED;
+		}
+		if (flags != net->flags)
+			network_changed(net, 0);
+
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
 		for (j = nnetworks; j > 0; --j)
