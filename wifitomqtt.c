@@ -411,17 +411,16 @@ static void wpa_keepalive(void *dat)
 		wpa_send("PING");
 }
 
-/* set net to NULL to indicate removal network */
-static void network_changed(const struct network *net, const char *ssid)
+static void network_changed(const struct network *net, int removing)
 {
 	int j, flags;
 	struct bss *bss;
 
 	for (j = 0, bss = bsss; j < nbsss; ++j, ++bss) {
-		if (strcmp(bss->ssid, ssid ?: net->ssid))
+		if (strcmp(bss->ssid, net->ssid))
 			continue;
 		flags = bss->flags;
-		compute_network_flags(bss, net);
+		compute_network_flags(bss, removing ? NULL : net);
 		if (flags != bss->flags)
 			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bss->bssid);
 	}
@@ -531,7 +530,7 @@ static void wpa_recvd_pkt(char *line)
 				net->flags &= ~BF_DISABLED;
 		}
 		if (flags != net->flags)
-			network_changed(net, net->ssid);
+			network_changed(net, 0);
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
@@ -706,7 +705,7 @@ static void wpa_recvd_pkt(char *line)
 		for (j = 0; j < nnetworks; ++j) {
 			if (networks[j].flags & BF_DISABLED) {
 				networks[j].flags &= ~BF_DISABLED;
-				network_changed(&networks[j], networks[j].ssid);
+				network_changed(networks+j, 0);
 			}
 		}
 		wpa_save_config();
@@ -717,7 +716,7 @@ static void wpa_recvd_pkt(char *line)
 
 		if (net) {// && (net->flags & BF_DISABLED)) {
 			net->flags &= ~BF_DISABLED;
-			network_changed(net, net->ssid);
+			network_changed(net, 0);
 			wpa_save_config();
 		}
 
@@ -727,7 +726,7 @@ static void wpa_recvd_pkt(char *line)
 
 		if (net) {// && !(net->flags & BF_DISABLED)) {
 			net->flags |= BF_DISABLED;
-			network_changed(net, net->ssid);
+			network_changed(net, 0);
 			wpa_save_config();
 		}
 
@@ -736,7 +735,7 @@ static void wpa_recvd_pkt(char *line)
 		struct network *net = find_network_by_id(idx);
 
 		if (net) {
-			network_changed(NULL, net->ssid);
+			network_changed(net, 1);
 			wpa_save_config();
 			remove_network(net);
 		}
