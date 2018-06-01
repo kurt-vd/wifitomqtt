@@ -178,6 +178,7 @@ struct network {
 
 static struct network *networks;
 static int nnetworks, snetworks;
+static int last_ap_id = -1;
 
 static int networkcmp(const void *a, const void *b)
 {
@@ -423,6 +424,21 @@ static void wpa_keepalive(void *dat)
 		wpa_send("PING");
 }
 
+static struct network *find_last_apcfg(const struct network *exclude)
+{
+	struct network *net, *ap = NULL;
+
+	for (net = networks; net < networks+nnetworks; ++net) {
+		if (net == exclude)
+			continue;
+		if (net->flags & BF_AP) {
+			if (!ap || (net->id > ap->id))
+				ap = net;
+		}
+	}
+	return ap;
+}
+
 static void network_changed(const struct network *net, int removing)
 {
 	int j, flags;
@@ -435,6 +451,15 @@ static void network_changed(const struct network *net, int removing)
 		compute_network_flags(bss, removing ? NULL : net);
 		if (flags != bss->flags)
 			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bss->bssid);
+	}
+
+	/* keep track of 'lastAP' */
+	struct network *lastap = find_last_apcfg(removing ? net : NULL);
+	int new_last_ap_id = lastap ? lastap->id : -1;
+
+	if (new_last_ap_id != last_ap_id) {
+		last_ap_id = new_last_ap_id;
+		publish_value(lastap ? lastap->ssid : "", "net/%s/lastAP", iface);
 	}
 }
 
@@ -1131,6 +1156,7 @@ int main(int argc, char *argv[])
 	publish_value("", "net/%s/freq", iface);
 	publish_value("", "net/%s/level", iface);
 	publish_value("", "net/%s/ssid", iface);
+	publish_value("", "net/%s/lastAP", iface);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
