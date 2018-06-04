@@ -786,9 +786,12 @@ static void wpa_recvd_pkt(char *line)
 		}
 		if (net->flags & BF_AP)
 			wpa_send("SET_NETWORK %i mode 2", id);
-		wpa_send("ENABLE_NETWORK %i", id);
+
 		if (net->netflags & NF_SEL)
 			wpa_send("SELECT_NETWORK %i", id);
+		else if (!(net->flags & BF_AP))
+			/* enable station-mode networks automatically */
+			wpa_send("ENABLE_NETWORK %i", id);
 
 	} else if (!mystrncmp("ENABLE_NETWORK all", head->a)) {
 		for (j = 0; j < nnetworks; ++j) {
