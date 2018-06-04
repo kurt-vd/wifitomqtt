@@ -877,6 +877,8 @@ static struct network *find_or_create_ssid(const char *ssid)
 {
 	struct network *net;
 
+	if (!ssid)
+		return NULL;
 	net = find_network_by_ssid(ssid);
 	if (!net) {
 		wpa_send("ADD_NETWORK");
@@ -958,8 +960,10 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		} else if (!strcmp(toks[3], "psk")) {
 			/* ssid is first line of payload */
 			net = find_or_create_ssid(strtok((char *)msg->payload, "\n\r"));
-			char *psk = strtok(NULL, "\n\r");
+			if (!net)
+				goto done;
 
+			char *psk = strtok(NULL, "\n\r");
 			if (net->id >= 0)
 				wpa_send("SET_NETWORK %i psk %s", net->id, psk);
 			else {
@@ -970,7 +974,8 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			/* TODO */
 		} else if (!strcmp(toks[3], "ap")) {
 			net = find_or_create_ssid((char *)msg->payload);
-
+			if (!net)
+				goto done;
 			net->flags |= BF_AP;
 			if (net->id >= 0)
 				wpa_send("SET_NETWORK %i mode %i", net->id, (net->flags & BF_AP) ? 2 : 0);
