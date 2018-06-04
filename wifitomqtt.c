@@ -925,7 +925,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 				struct network *net;
 
 				net = find_network_by_ssid(msg->payload ?: "");
-				if (net && net->id > 0)
+				if (net && net->id >= 0)
 					wpa_send("SELECT_NETWORK %i", net->id);
 				else if (net)
 					net->netflags |= NF_SEL;
