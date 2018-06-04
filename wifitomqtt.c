@@ -539,6 +539,16 @@ static void wpa_recvd_pkt(char *line)
 	libt_remove_timeout(wpa_cmd_timeout, NULL);
 	if (!strcmp(line, "FAIL") || !strcmp(line, "UNKNOWN COMMAND")) {
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
+
+		static char payload[2048];
+		static char topic[128];
+		snprintf(payload, sizeof(payload)-1, "'%s': %.30s",
+				strtok(head->a, " "), line);
+		sprintf(topic, "net/%s/fail", iface);
+		/* don't use publish_value, it has hardcoded retain=1 */
+		ret = mosquitto_publish(mosq, NULL, topic, strlen(payload), payload, mqtt_qos, 0);
+		if (ret < 0)
+			mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 	} else if (!*line) {
 		/* empty reply */
 	} else if (!strcmp(head->a, "ATTACH")) {
