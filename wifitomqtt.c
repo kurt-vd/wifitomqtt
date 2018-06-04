@@ -402,7 +402,7 @@ static int wpa_send(const char *fmt, ...)
 	add_strq(line);
 	mylog(LOG_DEBUG, "> %s", line);
 	free(line);
-	libt_add_timeout(0.5, wpa_cmd_timeout, NULL);
+	libt_add_timeout(1.5, wpa_cmd_timeout, NULL);
 	libt_add_timeout(5, wpa_keepalive, NULL);
 	return ret;
 }
