@@ -591,7 +591,6 @@ static void wpa_recvd_pkt(char *line)
 		if (!net)
 			goto done;
 
-		int flags = net->flags;
 		if (!strcmp(prop, "mode")) {
 			if (!strcmp(value, "2"))
 				net->flags |= BF_AP;
@@ -603,8 +602,7 @@ static void wpa_recvd_pkt(char *line)
 			else
 				net->flags &= ~BF_DISABLED;
 		}
-		if (flags != net->flags)
-			network_changed(net, 0);
+		network_changed(net, 0);
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
