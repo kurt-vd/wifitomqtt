@@ -891,7 +891,7 @@ static struct network *find_or_create_ssid(const char *ssid)
 
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
-	int ret, j;
+	int ret;
 
 	if (is_self_sync(msg))
 		ready = 1;
@@ -902,21 +902,10 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 	ret = mosquitto_sub_topic_tokenise(msg->topic, &toks, &ntoks);
 	if (ret < 0)
 		mylog(LOG_ERR, "mosquitto tokenize %s: %s", msg->topic, mosquitto_strerror(ret));
-	if (ntoks < 3 || strcmp("net", toks[0]) || strcmp(iface, toks[1])) {
-	} else if (!strcmp(toks[2], "raw")) {
-		wpa_send(msg->payload);
-	} else if (!strcmp(toks[2], "scan")) {
-		wpa_send("SCAN");
-	} else if (!strcmp(toks[2], "ap")) {
-		for (j = 0; j < nnetworks; ++j) {
-			if (!(networks[j].flags & BF_AP))
-				continue;
-			wpa_send("SELECT_NETWORK %i", networks[j].id);
-			mylog(LOG_NOTICE, "ap: selected '%s'", networks[j].ssid);
-			goto done;
-		}
-		mylog(LOG_NOTICE, "ap: no network configured");
-	} else if (!strcmp(toks[2], "ssid") && ntoks >= 4) {
+	if (ntoks >= 4 &&
+			!strcmp(toks[0], "net") &&
+			!strcmp(toks[1], iface) &&
+			!strcmp(toks[2], "ssid")) {
 		struct network *net;
 
 		if (!strcmp(toks[3], "set")) {
@@ -1094,7 +1083,7 @@ int main(int argc, char *argv[])
 	if (ret)
 		mylog(LOG_ERR, "mosquitto_connect %s:%i: %s", mqtt_host, mqtt_port, mosquitto_strerror(ret));
 	mosquitto_message_callback_set(mosq, my_mqtt_msg);
-	subscribe_topic("net/%s/#", iface);
+	subscribe_topic("net/%s/ssid/+", iface);
 
 	/* prepare poll */
 	pf[0].fd = wpasock;
