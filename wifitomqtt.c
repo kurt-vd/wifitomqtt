@@ -172,9 +172,14 @@ struct network {
 	char *psk;
 	int netflags;
 #define NF_SEL	0x01
+#define NF_REMOVE	0x02 /* remove requested before ADD_NETWORK completed */
 	int flags;
 	/* use BF_ flags */
+	int createseq;
 };
+
+/* incrementing counter to distinguish the order of network creation */
+static int netcreateseq;
 
 static struct network *networks;
 static int nnetworks, snetworks;
@@ -786,15 +791,29 @@ static void wpa_recvd_pkt(char *line)
 		}
 
 	} else if (!mystrncmp("ADD_NETWORK", head->a)) {
-		struct network *net;
-		int id;
+		struct network *net, *lp;
+		int id, npending;
 
 		id = strtoul(line, NULL, 0);
-		/* find first id-less network */
-		net = find_network_by_id(-1);
+		/* find oldest id-less network */
+		for (net = NULL, lp = networks; lp < networks+nnetworks; ++lp) {
+			if (lp->id != -1)
+				continue;
+			++npending;
+			if (!net || lp->createseq < net->createseq)
+				net = lp;
+		}
+		if (npending <= 1)
+			/* reset counter, and avoid potential overflows. */
+			netcreateseq = 0;
 		if (!net)
 			goto done;
 		net->id = id;
+		if (net->netflags & NF_REMOVE) {
+			wpa_send("REMOVE_NETWORK %i", id);
+			goto done;
+		}
+
 		wpa_send("SET_NETWORK %i ssid \"%s\"", id, net->ssid);
 		if (net->psk) {
 			wpa_send("SET_NETWORK %i psk %s", id, net->psk);
@@ -806,7 +825,7 @@ static void wpa_recvd_pkt(char *line)
 
 		if (net->netflags & NF_SEL)
 			wpa_send("SELECT_NETWORK %i", id);
-		else if (!(net->flags & BF_AP))
+		else if (!(net->flags & BF_DISABLED))
 			/* enable station-mode networks automatically */
 			wpa_send("ENABLE_NETWORK %i", id);
 
@@ -901,6 +920,7 @@ static struct network *find_or_create_ssid(const char *ssid)
 	if (!net) {
 		wpa_send("ADD_NETWORK");
 		net = add_network(-1, ssid);
+		net->createseq = ++netcreateseq;
 		sort_networks();
 		net = find_network_by_ssid(ssid);
 	}
@@ -943,37 +963,35 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 		} else if (!strcmp(toks[3], "enable")) {
 			net = find_network_by_ssid((char *)msg->payload);
-
-			if (net) {
-				net->flags &= ~BF_DISABLED;
+			if (net && net->id >= 0)
 				wpa_send("ENABLE_NETWORK %i", net->id);
-			}
+			else if (net)
+				/* queue flags already */
+				net->flags &= ~BF_DISABLED;
 
 		} else if (!strcmp(toks[3], "disable")) {
 			net = find_network_by_ssid((char *)msg->payload);
-
-			if (net) {
-				net->flags |= BF_DISABLED;
+			if (net && net->id >= 0)
 				wpa_send("DISABLE_NETWORK %i", net->id);
-			}
+			else if (net)
+				net->flags |= BF_DISABLED;
 
 		} else if (!strcmp(toks[3], "remove")) {
 			net = find_network_by_ssid((char *)msg->payload);
-
-			if (net) {
-				net->flags &= BF_KNOWN;
+			if (net && net->id >= 0)
 				wpa_send("REMOVE_NETWORK %i", net->id);
-			}
+			else if (net)
+				net->netflags |= NF_REMOVE;
+
 		} else if (!strcmp(toks[3], "psk")) {
 			/* ssid is first line of payload */
 			net = find_or_create_ssid(strtok((char *)msg->payload, "\n\r"));
-			if (!net)
-				goto done;
-
+			/* psk is second line */
 			char *psk = strtok(NULL, "\n\r");
-			if (net->id >= 0)
+
+			if (net && net->id >= 0)
 				wpa_send("SET_NETWORK %i psk %s", net->id, psk);
-			else {
+			else if (net) {
 				myfree(net->psk);
 				net->psk = strdup(psk);
 			}
@@ -981,17 +999,17 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			/* TODO */
 		} else if (!strcmp(toks[3], "ap")) {
 			net = find_or_create_ssid((char *)msg->payload);
-			if (!net)
-				goto done;
-			net->flags |= BF_AP;
-			if (net->id >= 0)
-				wpa_send("SET_NETWORK %i mode %i", net->id, (net->flags & BF_AP) ? 2 : 0);
+
+			if (net && net->id >= 0)
+				wpa_send("SET_NETWORK %i mode 2", net->id);
+			else
+				/* leave new AP network disabled */
+				net->flags |= BF_AP | BF_DISABLED;
 
 		} else if (!strcmp(toks[3], "create")) {
 			find_or_create_ssid((char *)msg->payload);
 		}
 	}
-done:
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
 }
 
