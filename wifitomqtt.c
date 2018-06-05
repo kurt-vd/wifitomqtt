@@ -776,9 +776,10 @@ static void wpa_recvd_pkt(char *line)
 				freq = strtoul(val, NULL, 0);
 			else if (!strcmp(tok, "mode"))
 				mode = val;
-			else if (!strcmp(tok, "wpa_state"))
+			else if (!strcmp(tok, "wpa_state")) {
 				wpastate = val;
 				self_ap = !strcmp(val, "AP");
+			}
 		}
 
 		if (!wifi_state) {
