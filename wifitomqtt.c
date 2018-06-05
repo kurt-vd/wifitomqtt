@@ -382,6 +382,18 @@ static void set_wifi_state(const char *str)
 	publish_value(wifi_state, "net/%s/wifistate", iface);
 }
 
+static int nstations;
+static void set_wifi_stations(int n)
+{
+	char buf[16];
+
+	nstations = n;
+	sprintf(buf, "%i", n);
+	if (n < 0)
+		strcpy(buf, "");
+	publish_value(buf, "net/%s/stations", iface);
+}
+
 /* wpa functions */
 static inline int mystrncmp(const char *needle, const char *haystack)
 {
@@ -521,10 +533,17 @@ static void wpa_recvd_pkt(char *line)
 		} else if (!strcmp(tok, "AP-ENABLED")) {
 			self_ap = 1;
 			set_wifi_state("AP");
+			set_wifi_stations(0);
 		} else if (!strcmp(tok, "AP-DISABLED")) {
 			self_ap = 0;
 			/* issue scan request immediately */
 			wpa_send("SCAN");
+			set_wifi_stations(-1);
+		} else if (!strcmp(tok, "AP-STA-CONNECTED")) {
+			set_wifi_stations(nstations+1);
+		} else if (!strcmp(tok, "AP-STA-DISCONNECTED")) {
+			set_wifi_stations(nstations-1);
+
 		} else if (!strcmp(tok, "CTRL-EVENT-BSS-ADDED")) {
 			strtok(NULL, " \t");
 			tok = strtok(NULL, " \t");
@@ -550,6 +569,10 @@ static void wpa_recvd_pkt(char *line)
 	}
 	libt_remove_timeout(wpa_cmd_timeout, NULL);
 	if (!strcmp(line, "FAIL") || !strcmp(line, "UNKNOWN COMMAND")) {
+		if (!mystrncmp("STA-NEXT ", head->a) || !strcmp("STA-FIRST", head->a))
+			/* AP station discovery fails on end-of-list */
+			goto done;
+
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
 
 		static char payload[2048];
@@ -763,10 +786,14 @@ static void wpa_recvd_pkt(char *line)
 			 * Fix self_ap and wifi_state
 			 */
 			self_ap = !strcmp(mode ?: "", "AP");
-			if (self_ap)
+			if (self_ap) {
 				set_wifi_state("AP");
-			else if (!strcmp(wpastate ?: "", "COMPLETED") && !strcmp(mode ?: "", "station"))
+				wpa_send("STA-FIRST");
+				set_wifi_stations(0);
+			} else if (!strcmp(wpastate ?: "", "COMPLETED") && !strcmp(mode ?: "", "station")) {
 				set_wifi_state("station");
+				publish_value("", "net/%s/stations", iface);
+			}
 		}
 
 		publish_value(curr_bssid, "net/%s/bssid", iface);
@@ -789,6 +816,16 @@ static void wpa_recvd_pkt(char *line)
 			publish_value("", "net/%s/ssid", iface);
 			curr_level = 0;
 		}
+
+	} else if (!strcmp("STA-FIRST", head->a)) {
+		/* initial stations request */
+		set_wifi_stations(1);
+		wpa_send("STA-NEXT %s", strtok(line, "\r\n"));
+
+	} else if (!strcmp("STA-FIRST", head->a)) {
+		/* subsequent station request */
+		set_wifi_stations(nstations+1);
+		wpa_send("STA-NEXT %s", strtok(line, "\r\n"));
 
 	} else if (!mystrncmp("ADD_NETWORK", head->a)) {
 		struct network *net, *lp;
@@ -1187,6 +1224,7 @@ int main(int argc, char *argv[])
 	publish_value("", "net/%s/level", iface);
 	publish_value("", "net/%s/ssid", iface);
 	publish_value("", "net/%s/lastAP", iface);
+	publish_value("", "net/%s/stations", iface);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
