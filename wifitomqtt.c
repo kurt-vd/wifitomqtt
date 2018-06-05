@@ -496,7 +496,14 @@ static void wpa_recvd_pkt(char *line)
 
 	if (!mystrncmp("<2>", line) || !mystrncmp("<3>", line) || !mystrncmp("<4>", line)) {
 		/* publish line+3 to mqtt log */
-		publish_value(line+3, "tmp/%s/wpa", iface);
+		char topic[128];
+
+		/* don't use publish_value, it has hardcoded retain=1 */
+		sprintf(topic, "tmp/%s/wpa", iface);
+		ret = mosquitto_publish(mosq, NULL, topic, strlen(line+3), line+3, mqtt_qos, 0);
+		if (ret < 0)
+			mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
+		/* process value */
 		tok = strtok(line+3, " \t");
 		if (!strcmp(tok, "CTRL-EVENT-CONNECTED")) {
 			if (!self_ap)
