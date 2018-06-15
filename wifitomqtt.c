@@ -433,11 +433,9 @@ static void wpa_cmd_timeout(void *dat)
 
 static void wpa_keepalive(void *dat)
 {
-	/*
 	if (!self_ap && curr_bssid[0])
 		wpa_send("BSS %s", curr_bssid);
 	else
-	*/
 		wpa_send("PING");
 }
 
