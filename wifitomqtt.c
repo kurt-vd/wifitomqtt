@@ -1225,6 +1225,7 @@ int main(int argc, char *argv[])
 	publish_value("", "net/%s/ssid", iface);
 	publish_value("", "net/%s/lastAP", iface);
 	publish_value("", "net/%s/stations", iface);
+	publish_value("", "net/%s/wifistate", iface);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
