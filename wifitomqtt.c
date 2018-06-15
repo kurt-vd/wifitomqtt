@@ -733,11 +733,6 @@ static void wpa_recvd_pkt(char *line)
 				publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
 			bss->freq = freq;
 			bss->level = level;
-			if (!self_ap && !strcmp(curr_bssid, bssid ?: "")) {
-				if (level != curr_level)
-					publish_value(valuetostr("%i", level), "net/%s/level", iface);
-				curr_level = level;
-			}
 			int savedflags = bss->flags;
 			compute_flags(bss, flags);
 			if (savedflags != bss->flags)
@@ -753,6 +748,12 @@ static void wpa_recvd_pkt(char *line)
 			compute_network_flags(bss, find_network_by_ssid(bss->ssid));
 			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
 			sort_ap();
+		}
+		/* publish corresponding level */
+		if (!self_ap && !strcmp(curr_bssid, bssid ?: "")) {
+			if (level != curr_level)
+				publish_value(valuetostr("%i", level), "net/%s/level", iface);
+			curr_level = level;
 		}
 	} else if (!strcmp("STATUS", head->a)) {
 		char *val;
