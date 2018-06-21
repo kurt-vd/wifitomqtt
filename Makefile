@@ -16,6 +16,9 @@ VERSION := $(shell git describe --tags --always)
 # avoid overruling the VERSION
 CPPFLAGS += -DVERSION=\"$(VERSION)\"
 
+ifneq (,$(findstring -DNOPLAINPSK, $(CPPFLAGS)))
+wifitomqtt: LDLIBS+=-lcrypto
+endif
 wifitomqtt: libet/libt.o common.o
 
 ifaddrtomqtt: libet/libt.o common.o

@@ -35,6 +35,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <mosquitto.h>
+#ifdef NOPLAINPSK
+#include <openssl/evp.h>
+#endif
 
 #include "libet/libt.h"
 #include "common.h"
@@ -1014,16 +1017,43 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 		} else if (!strcmp(toks[3], "psk")) {
 			/* ssid is first line of payload */
-			net = find_or_create_ssid(strtok((char *)msg->payload, "\n\r"));
+			char *ssid = strtok((char *)msg->payload, "\n\r");
 			/* psk is second line */
 			char *psk = strtok(NULL, "\n\r");
+#ifdef NOPLAINPSK
+			/* test for plaintext PSK, and encrypt if so */
+			if (*psk == '"' && psk[strlen(psk)-1] == '"') {
+				/* strip " */
+				psk[strlen(psk)-1] = 0;
+				++psk;
 
+				/* encrypt */
+				static uint8_t binpsk[32];
+				static char textpsk[65];
+				if (!PKCS5_PBKDF2_HMAC_SHA1(psk, strlen(psk), (const void *)ssid, strlen(ssid),
+						4096, sizeof(binpsk), binpsk)) {
+					publish_failure("create psk for '%s' failed", ssid);
+					goto psk_done;
+				}
+				/* convert to text */
+				for (j =0; j < sizeof(binpsk); ++j)
+					sprintf(textpsk[j*2], "%02x", binpsk[j]);
+				psk = textpsk;
+			}
+#endif
+			net = find_or_create_ssid(ssid);
 			if (net && net->id >= 0)
 				wpa_send("SET_NETWORK %i psk %s", net->id, psk);
 			else if (net) {
 				myfree(net->psk);
 				net->psk = strdup(psk);
 			}
+#ifdef NOPLAINPSK
+/* add an empty statement after the label,
+ * since C cannot label the end of a block.
+ */
+psk_done:;
+#endif
 		} else if (!strcmp(toks[3], "wep")) {
 			/* TODO */
 		} else if (!strcmp(toks[3], "ap")) {
