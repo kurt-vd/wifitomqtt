@@ -578,6 +578,7 @@ static void wpa_recvd_pkt(char *line)
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
 		publish_failure("'%s': %.30s", strtok(head->a, " "), line);
 	} else if (!*line) {
+		mylog(LOG_INFO, "'%s': empty response", head->a);
 		/* empty reply */
 	} else if (!strcmp(head->a, "ATTACH")) {
 		mylog(LOG_NOTICE, "wpa connected");
@@ -1222,10 +1223,6 @@ int main(int argc, char *argv[])
 				continue;
 			if (ret < 0) {
 				mylog(LOG_WARNING, "recv wpa: %s", ESTR(errno));
-				break;
-			}
-			if (!ret) {
-				mylog(LOG_WARNING, "wpa closed");
 				break;
 			}
 			line[ret] = 0;
