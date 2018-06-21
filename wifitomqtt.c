@@ -502,7 +502,6 @@ static void wpa_recvd_pkt(char *line)
 	struct str *head;
 
 	ret = strlen(line);
-	line[ret] = 0;
 	if (ret && line[ret-1] == '\n')
 		line[ret-1] = 0;
 	/* prepare log */
