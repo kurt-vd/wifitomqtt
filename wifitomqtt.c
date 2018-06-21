@@ -818,7 +818,7 @@ static void wpa_recvd_pkt(char *line)
 		set_wifi_stations(1);
 		wpa_send("STA-NEXT %s", strtok(line, "\r\n"));
 
-	} else if (!strcmp("STA-FIRST", head->a)) {
+	} else if (!strcmp("STA-NEXT", head->a)) {
 		/* subsequent station request */
 		set_wifi_stations(nstations+1);
 		wpa_send("STA-NEXT %s", strtok(line, "\r\n"));
