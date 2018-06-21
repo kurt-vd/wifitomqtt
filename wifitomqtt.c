@@ -1184,7 +1184,7 @@ int main(int argc, char *argv[])
 			}
 			if (!ret) {
 				mylog(LOG_WARNING, "wpa closed");
-				//break;
+				break;
 			}
 			line[ret] = 0;
 			wpa_recvd_pkt(line);
