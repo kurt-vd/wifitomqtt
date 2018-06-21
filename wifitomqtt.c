@@ -97,6 +97,8 @@ static struct mosquitto *mosq;
 __attribute__((format(printf,2,3)))
 static void publish_value(const char *value, const char *topicfmt, ...);
 __attribute__((format(printf,1,2)))
+static void publish_failure(const char *valuefmt, ...);
+__attribute__((format(printf,1,2)))
 static const char *valuetostr(const char *fmt, ...);
 
 /* WPA */
@@ -571,16 +573,7 @@ static void wpa_recvd_pkt(char *line)
 			goto done;
 
 		mylog(LOG_WARNING, "'%s': %.30s", head->a,  line);
-
-		static char payload[2048];
-		static char topic[128];
-		snprintf(payload, sizeof(payload)-1, "'%s': %.30s",
-				strtok(head->a, " "), line);
-		sprintf(topic, "net/%s/fail", iface);
-		/* don't use publish_value, it has hardcoded retain=1 */
-		ret = mosquitto_publish(mosq, NULL, topic, strlen(payload), payload, mqtt_qos, 0);
-		if (ret < 0)
-			mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
+		publish_failure("'%s': %.30s", strtok(head->a, " "), line);
 	} else if (!*line) {
 		/* empty reply */
 	} else if (!strcmp(head->a, "ATTACH")) {
@@ -1061,6 +1054,25 @@ static void publish_value(const char *value, const char *topicfmt, ...)
 
 	/* publish cache */
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value ?: ""), value, mqtt_qos, 1);
+	if (ret < 0)
+		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
+}
+
+static void publish_failure(const char *valuefmt, ...)
+{
+	va_list va;
+	int ret;
+	static char topic[1024];
+	static char value[1024];
+
+	sprintf(topic, "net/%s/fail", iface);
+
+	va_start(va, valuefmt);
+	vsprintf(value, valuefmt, va);
+	va_end(va);
+
+	/* publish cache */
+	ret = mosquitto_publish(mosq, NULL, topic, strlen(value), value, mqtt_qos, 0);
 	if (ret < 0)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 }
