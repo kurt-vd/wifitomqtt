@@ -851,8 +851,10 @@ static void wpa_recvd_pkt(char *line)
 			free(net->psk);
 			net->psk = NULL;
 		}
-		if (net->flags & BF_AP)
+		if (net->flags & BF_AP) {
 			wpa_send("SET_NETWORK %i mode 2", id);
+			wpa_send("SET_NETWORK %i bgscan \"\"", id);
+		}
 
 		if (net->netflags & NF_SEL)
 			wpa_send("SELECT_NETWORK %i", id);
@@ -1058,9 +1060,10 @@ psk_done:;
 		} else if (!strcmp(toks[3], "ap")) {
 			net = find_or_create_ssid((char *)msg->payload);
 
-			if (net && net->id >= 0)
+			if (net && net->id >= 0) {
 				wpa_send("SET_NETWORK %i mode 2", net->id);
-			else
+				wpa_send("SET_NETWORK %i bgscan \"\"", net->id);
+			} else
 				/* leave new AP network disabled */
 				net->flags |= BF_AP | BF_DISABLED;
 
