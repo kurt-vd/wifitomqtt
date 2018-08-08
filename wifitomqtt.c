@@ -60,6 +60,9 @@ static const char help_msg[] =
 	"\n"
 	" -h, --host=HOST[:PORT]Specify alternate MQTT host+port\n"
 	" -i, --iface=IFACE	Control IFACE (default: wlan0)\n"
+	" -S, --no-ap-bgscan	Emit empty bgscan for AP networks\n"
+	"			This avoids warnings on devices that cannot scan\n"
+	"			while in AP mode\n"
 	"\n"
 	"Arguments\n"
 	" FILE|DEVICE	Read input from FILE or DEVICE\n"
@@ -74,13 +77,14 @@ static struct option long_opts[] = {
 	{ "host", required_argument, NULL, 'h', },
 	{ "iface", required_argument, NULL, 'i', },
 
+	{ "no-ap-bgscan", no_argument, NULL, 'S', },
 	{ },
 };
 #else
 #define getopt_long(argc, argv, optstring, longopts, longindex) \
 	getopt((argc), (argv), (optstring))
 #endif
-static const char optstring[] = "Vv?h:i:";
+static const char optstring[] = "Vv?h:i:S";
 
 /* signal handler */
 static volatile int sigterm;
@@ -112,6 +116,7 @@ static int wpa_lost;
 static int self_ap; /* we are AP ourselve */
 static char curr_bssid[20];
 static int curr_level;
+static int noapbgscan;
 
 /* signalling */
 static int mysignal(int signr, void (*fn)(int))
@@ -1082,7 +1087,8 @@ psk_done:;
 
 			/* AP-specific settings */
 			add_network_config(net, "mode", "2");
-			add_network_config(net, "bgscan", "\"\"");
+			if (noapbgscan)
+				add_network_config(net, "bgscan", "\"\"");
 			if (net->id < 0)
 				/* leave new AP network disabled */
 				net->flags |= BF_AP | BF_DISABLED;
@@ -1188,6 +1194,9 @@ int main(int argc, char *argv[])
 		break;
 	case 'i':
 		iface = optarg;
+		break;
+	case 'S':
+		noapbgscan = 1;
 		break;
 
 	default:
