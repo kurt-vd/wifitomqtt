@@ -939,6 +939,9 @@ static void wpa_recvd_pkt(char *line)
 
 	} else if (!strcmp("PING", head->a)) {
 		/* ignore */
+	} else if (!mystrncmp("SET ", head->a)) {
+		wpa_save_config();
+
 	} else {
 		mylog(LOG_INFO, "'%.20s' OK", head->a);
 	}
@@ -1108,6 +1111,13 @@ psk_done:;
 		} else if (!strcmp(toks[3], "create")) {
 			find_or_create_ssid((char *)msg->payload);
 		}
+	} else if (ntoks == 5 &&
+			!strcmp(toks[0], "net") &&
+			!strcmp(toks[1], iface) &&
+			!strcmp(toks[2], "wifi") &&
+			!strcmp(toks[3], "config")) {
+
+		wpa_send("SET %s %s", toks[4], (char *)msg->payload);
 	}
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
 }
