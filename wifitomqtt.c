@@ -1080,6 +1080,18 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
  */
 psk_done:;
 #endif
+		} else if (!strcmp(toks[3], "config") && ntoks == 5) {
+			/* ssid is first line of payload */
+			char *ssid = strtok((char *)msg->payload, "\n\r");
+			/* key is toks[4] */
+			char *key = toks[4];
+
+			/* value is second line */
+			char *value = strtok(NULL, "\n\r");
+
+			net = find_or_create_ssid(ssid);
+			add_network_config(net, key, value);
+
 		} else if (!strcmp(toks[3], "wep")) {
 			/* TODO */
 		} else if (!strcmp(toks[3], "ap")) {
