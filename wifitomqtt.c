@@ -174,13 +174,15 @@ static struct str *pop_strq(void)
 struct network {
 	int id;
 	char *ssid;
-	char *psk;
 	int netflags;
 #define NF_SEL	0x01
 #define NF_REMOVE	0x02 /* remove requested before ADD_NETWORK completed */
 	int flags;
 	/* use BF_ flags */
 	int createseq;
+	/* additional configurations to hold */
+	char **cfgs;
+	int ncfgs, scfgs;
 };
 
 /* incrementing counter to distinguish the order of network creation */
@@ -236,13 +238,14 @@ static struct network *add_network(int num, const char *ssid)
 	return net;
 }
 
+static void remove_network_configs(struct network *net);
 static void remove_network(struct network *net)
 {
 	if (!net)
 		return;
 	/* handle memory */
 	myfree(net->ssid);
-	myfree(net->psk);
+	remove_network_configs(net);
 
 	/* remove element, keep sorted */
 	int idx = net - networks;
@@ -498,6 +501,34 @@ static void wpa_save_config(void)
 	}
 	if (!str)
 		wpa_send("SAVE_CONFIG");
+}
+
+static void add_network_config(struct network *net, const char *key, const char *value)
+{
+#define CFGBLK	16
+
+	if (net && net->id >= 0) {
+		wpa_send("SET_NETWORK %i %s %s", net->id, key, value);
+		return;
+	}
+
+	if (net->ncfgs+2 > net->scfgs) {
+		net->scfgs = (net->ncfgs+2+CFGBLK-1) & ~(CFGBLK-1);
+		net->cfgs = realloc(net->cfgs, sizeof(net->cfgs[0])*net->scfgs);
+		if (!net->cfgs)
+			mylog(LOG_ERR, "realloc %u cfgs: %s", net->scfgs, ESTR(errno));
+	}
+	net->cfgs[net->ncfgs++] = strdup(key);
+	net->cfgs[net->ncfgs++] = strdup(value);
+}
+
+static void remove_network_configs(struct network *net)
+{
+	int j;
+
+	for (j = 0; j < net->ncfgs; ++j)
+		myfree(net->cfgs[j]);
+	myfree(net->cfgs);
 }
 
 static void wpa_recvd_pkt(char *line)
@@ -846,15 +877,9 @@ static void wpa_recvd_pkt(char *line)
 		}
 
 		wpa_send("SET_NETWORK %i ssid \"%s\"", id, net->ssid);
-		if (net->psk) {
-			wpa_send("SET_NETWORK %i psk %s", id, net->psk);
-			free(net->psk);
-			net->psk = NULL;
-		}
-		if (net->flags & BF_AP) {
-			wpa_send("SET_NETWORK %i mode 2", id);
-			wpa_send("SET_NETWORK %i bgscan \"\"", id);
-		}
+		for (j = 0; j < net->ncfgs; j += 2)
+			wpa_send("SET_NETWORK %i %s %s", id, net->cfgs[j], net->cfgs[j+1]);
+		remove_network_configs(net);
 
 		if (net->netflags & NF_SEL)
 			wpa_send("SELECT_NETWORK %i", id);
@@ -1043,12 +1068,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			}
 #endif
 			net = find_or_create_ssid(ssid);
-			if (net && net->id >= 0)
-				wpa_send("SET_NETWORK %i psk %s", net->id, psk);
-			else if (net) {
-				myfree(net->psk);
-				net->psk = strdup(psk);
-			}
+			add_network_config(net, "psk", psk);
 #ifdef NOPLAINPSK
 /* add an empty statement after the label,
  * since C cannot label the end of a block.
@@ -1060,10 +1080,10 @@ psk_done:;
 		} else if (!strcmp(toks[3], "ap")) {
 			net = find_or_create_ssid((char *)msg->payload);
 
-			if (net && net->id >= 0) {
-				wpa_send("SET_NETWORK %i mode 2", net->id);
-				wpa_send("SET_NETWORK %i bgscan \"\"", net->id);
-			} else
+			/* AP-specific settings */
+			add_network_config(net, "mode", "2");
+			add_network_config(net, "bgscan", "\"\"");
+			if (net->id < 0)
 				/* leave new AP network disabled */
 				net->flags |= BF_AP | BF_DISABLED;
 
