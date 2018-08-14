@@ -1,4 +1,6 @@
-PROGS	= wifitomqtt ifaddrtomqtt
+PROGS	= wifitomqtt
+PROGS	+= attomqtt
+PROGS	+= ifaddrtomqtt
 default	: $(PROGS)
 
 PREFIX	= /usr/local
@@ -20,6 +22,8 @@ ifneq (,$(findstring -DNOPLAINPSK, $(CPPFLAGS)))
 wifitomqtt: LDLIBS+=-lcrypto
 endif
 wifitomqtt: libet/libt.o common.o
+
+attomqtt: libet/libt.o common.o
 
 ifaddrtomqtt: libet/libt.o common.o
 

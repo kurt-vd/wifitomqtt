@@ -1,6 +1,7 @@
 # output
 *.o
 wifitomqtt
+attomqtt
 ifaddrtomqtt
 
 # environment
