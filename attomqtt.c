@@ -59,6 +59,8 @@ static const char help_msg[] =
 	" -p, --prefix=PREFIX	Use MQTT topic prefix (default: net/TTYNAME/)\n"
 	" -o, --options=OPT[,OPT...]	tune additional options\n"
 	"				turn off options that are prefixed with no-\n"
+	"	csq[=DELAY]	Enable periodic signal monitor (AT+CSQ)\n"
+	"			AT+CSQ is done once each DELAY seconds (default 10)\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
@@ -83,6 +85,8 @@ static struct option long_opts[] = {
 static const char optstring[] = "Vv?h:p:o:";
 
 static char *const subopttable[] = {
+	"csq",
+#define O_CSQ		(1 << 0)
 	NULL,
 };
 
@@ -99,8 +103,6 @@ static int mqtt_keepalive = 10;
 static int mqtt_qos = -1;
 static char *mqtt_prefix;
 static int mqtt_prefix_len;
-
-/* state */
 
 /* utils */
 static struct mosquitto *mosq;
@@ -121,8 +123,14 @@ static int atsock;
 static int ncmds;
 static int ignore_responses;
 static int options;
+static double csq_delay = 10;
+/* raw rssi & ber values, 99 equals 'no value' */
+static int saved_rssi = 99, saved_ber = 99;
 
 /* AT iface */
+__attribute__((format(printf,1,2)))
+static int at_write(const char *fmt, ...);
+
 static void at_timeout(void *dat)
 {
 	mypublish("fail", "timeout", 0);
@@ -141,6 +149,27 @@ static void at_recvd_response(int argc, char *argv[])
 	} else if (strcmp(argv[argc-1], "OK")) {
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
+	}else if (!strcasecmp(argv[0], "AT+CSQ")) {
+		/* response[1] is of format: '+CSQ: <RSSI>,<BER>' */
+		if (strncasecmp(argv[1], "+CSQ: ", 6))
+			return;
+		saved_rssi = strtoul(argv[1]+6, &endp, 0);
+		if (saved_rssi == 99)
+			mypublish("rssi", NULL, 1);
+		else
+			mypublish("rssi", valuetostr("%i", -113 + 2*saved_rssi), 1);
+		/* bit-error-rate */
+		saved_ber = strtoul(endp, NULL, 0);
+		static const char *const ber_values[] = {
+			[0] = "<0.01%",
+			[1] = "0.01% -- 0.1%",
+			[2] = "0.1% -- 0.5%",
+			[3] = "0.5% -- 1%",
+			[4] = "1% -- 2%",
+			[5] = "2% -- 4%",
+			[6] = "4% -- 8%",
+		};
+		mypublish("ber", (saved_ber >= sizeof(ber_values)/sizeof(ber_values[0])) ? NULL : ber_values[saved_ber], 1);
 	}
 }
 
@@ -255,6 +284,13 @@ static int at_write(const char *fmt, ...)
 		libt_add_timeout(5, at_timeout, NULL);
 	++ncmds;
 	return ret;
+}
+
+static void at_csq(void *dat)
+{
+	at_write("at+csq");
+	/* repeat */
+	libt_add_timeout(csq_delay, at_csq, dat);
 }
 
 /* MQTT iface */
@@ -377,6 +413,10 @@ int main(int argc, char *argv[])
 			else
 				options |= opt;
 			switch (opt) {
+			case O_CSQ:
+				if (optarg)
+					csq_delay = strtod(optarg, NULL);
+				break;
 			};
 		}
 		break;
@@ -467,6 +507,8 @@ int main(int argc, char *argv[])
 	poll(NULL, 0, 10);
 	/* enable echo */
 	at_write("ate1");
+	if (options & O_CSQ)
+		libt_add_timeout(1, at_csq, NULL);
 	for (;;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
@@ -520,6 +562,12 @@ int main(int argc, char *argv[])
 	}
 
 done:
+	if (saved_rssi != 99)
+		/* clear rssi */
+		mypublish("rssi", NULL, 1);
+	if (saved_ber != 99)
+		/* clear rssi */
+		mypublish("ber", NULL, 1);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
