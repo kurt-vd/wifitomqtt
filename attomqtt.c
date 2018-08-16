@@ -115,6 +115,7 @@ static void at_timeout(void *dat)
 {
 	mypublish("fail", "timeout", 0);
 	mylog(LOG_WARNING, "AT command timeout");
+	ncmds = 0;
 }
 
 static void at_recvd_response(int argc, char *argv[])
