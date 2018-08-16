@@ -232,8 +232,9 @@ static int at_write(const char *fmt, ...)
 		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, buf, ret ? ESTR(errno) : "eof");
 		return ret;
 	}
+	if (!ncmds)
+		libt_add_timeout(5, at_timeout, NULL);
 	++ncmds;
-	libt_add_timeout(5, at_timeout, NULL);
 	return ret;
 }
 
