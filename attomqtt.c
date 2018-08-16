@@ -410,6 +410,7 @@ int main(int argc, char *argv[])
 	/* initial sync */
 	at_write("at");
 	ignore_responses = 1;
+	poll(NULL, 0, 10);
 	/* enable echo */
 	at_write("ate1");
 	while (!sigterm) {
