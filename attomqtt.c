@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <locale.h>
 #include <poll.h>
+#include <termios.h>
 #include <syslog.h>
 #include <mosquitto.h>
 
@@ -148,18 +149,18 @@ static void at_recvd(char *line)
 	}
 	if (fill+len+1 >= sizeof(buf))
 		mylog(LOG_ERR, "buffer full, no completed command");
+	strcpy(buf+fill, line);
+	fill += len;
 
-	for (sep = line; *sep;) {
+	for (sep = buf+consumed; *sep;) {
 		str = sep;
-		sep = strpbrk(str, "\r\n");
-		if (sep) {
-			/* remove newlines */
-			for (; *sep && strchr("\r\n", *sep); ++sep)
-				*sep = 0;
-		}
+		sep = strchr(str, '\n');
+		if (sep)
+			*sep++ = 0;
 		/* '*line' indicates we're not eof yet */
 		if (!sep && *line)
 			break;
+		consumed = sep ? sep - buf : fill;
 		if (!strncmp(str, "RING", 4)) {
 			static char *ring_argv[2];
 			/* indicate ring */
@@ -206,8 +207,7 @@ static void at_recvd(char *line)
 			argc = 0;
 		}
 	}
-	consumed = fill;
-	if (consumed >= fill)
+	if (consumed >= fill && !argc)
 		consumed = fill = 0;
 }
 
@@ -225,7 +225,7 @@ static int at_write(const char *fmt, ...)
 	if (ret <= 0)
 		return ret;
 
-	ret = dprintf(atsock, "%s\r", buf);
+	ret = dprintf(atsock, "%s\r\n", buf);
 	if (ret <= 0) {
 		mypublish("fail", valuetostr("dprintf %s %7s: %s", atdev, buf, ret ? ESTR(errno) : "eof"), 0);
 		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, buf, ret ? ESTR(errno) : "eof");
@@ -233,10 +233,10 @@ static int at_write(const char *fmt, ...)
 	}
 	++ncmds;
 	libt_add_timeout(5, at_timeout, NULL);
-fprintf(stderr, "NCMD: %i\n", ncmds);
 	return ret;
 }
 
+/* MQTT iface */
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
 	if (is_self_sync(msg)) {
@@ -364,6 +364,18 @@ int main(int argc, char *argv[])
 	atsock = open(atdev, O_RDWR | O_NOCTTY | O_CLOEXEC | O_NONBLOCK);
 	if (atsock < 0)
 		mylog(LOG_ERR, "open %s: %s", atdev, ESTR(errno));
+
+	struct termios tio;
+	if (tcgetattr(atsock, &tio) < 0)
+		mylog(LOG_ERR, "tcgetattr %s failed: %s", atdev, ESTR(errno));
+	/* drop incoming CR
+	 * The idea here is to emit \r\n to the modem
+	 * and to strip \r on the input.
+	 * That makes parser life way simpler!
+	 */
+	tio.c_iflag |= IGNCR;
+	if (tcsetattr(atsock, TCSANOW, &tio) < 0)
+		mylog(LOG_ERR, "tcsetattr %s failed: %s", atdev, ESTR(errno));
 
 	/* MQTT start */
 	if (mqtt_qos < 0)
