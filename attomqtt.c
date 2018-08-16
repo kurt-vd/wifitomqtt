@@ -127,9 +127,50 @@ static double csq_delay = 10;
 /* raw rssi & ber values, 99 equals 'no value' */
 static int saved_rssi = 99, saved_ber = 99;
 
+/* command queue */
+struct str {
+	struct str *next;
+	char a[1];
+};
+
+static struct str *strq, *strqlast;
+static int cmd_pending;
+
+static void add_strq(const char *a)
+{
+	struct str *str;
+
+	str = malloc(sizeof(*str)+strlen(a));
+	if (!str)
+		mylog(LOG_ERR, "malloc str: %s", ESTR(errno));
+	strcpy(str->a, a);
+
+	/* linked list */
+	if (strqlast)
+		strqlast->next = str;
+	else
+		strq = str;
+	strqlast = str;
+	str->next = NULL;
+}
+
+static struct str *pop_strq(void)
+{
+	struct str *head;
+
+	head = strq;
+	if (head)
+		strq = strq->next;
+	if (!strq)
+		strqlast = NULL;
+	return head;
+}
+
 /* AT iface */
 __attribute__((format(printf,1,2)))
 static int at_write(const char *fmt, ...);
+/* low-level write */
+static int at_ll_write(const char *str);
 
 static void at_timeout(void *dat)
 {
@@ -217,9 +258,6 @@ static void at_recvd(char *line)
 			ring_argv[0] = str;
 			mypublish("echo", argv[0], 0);
 			at_recvd_response(1, ring_argv);
-			if (ncmds)
-				/* postpone timeout */
-				libt_add_timeout(5, at_timeout, NULL);
 			continue;
 		}
 		/* collect response */
@@ -228,17 +266,16 @@ static void at_recvd(char *line)
 				!strcmp(str, "NO CARRIER") ||
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
-			--ncmds;
-			if (ncmds < 0)
-				/* command underflow is possible if someone insert commands
-				 * directly in the tty device
-				 */
-				ncmds = 0;
-			if (ncmds)
-				/* set next timeout */
-				libt_add_timeout(5, at_timeout, NULL);
-			else
+			struct str *head;
+
+			cmd_pending = 0;
+			head = pop_strq();
+			if (head) {
+				at_ll_write(head->a);
+				free(head);
+			} else {
 				libt_remove_timeout(at_timeout, NULL);
+			}
 			if (ignore_responses > 0) {
 				--ignore_responses;
 				goto response_done;
@@ -266,7 +303,22 @@ response_done:
 		consumed = fill = 0;
 }
 
-/* MQTT API */
+/* AT API */
+static int at_ll_write(const char *str)
+{
+	int ret;
+
+	ret = dprintf(atsock, "%s\r\n", str);
+	if (ret <= 0) {
+		mypublish("fail", valuetostr("dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof"), 0);
+		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof");
+	} else {
+		cmd_pending = 1;
+		libt_add_timeout(5, at_timeout, NULL);
+	}
+	return ret;
+}
+
 static int at_write(const char *fmt, ...)
 {
 	static char buf[1024];
@@ -280,16 +332,11 @@ static int at_write(const char *fmt, ...)
 	if (ret <= 0)
 		return ret;
 
-	ret = dprintf(atsock, "%s\r\n", buf);
-	if (ret <= 0) {
-		mypublish("fail", valuetostr("dprintf %s %7s: %s", atdev, buf, ret ? ESTR(errno) : "eof"), 0);
-		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, buf, ret ? ESTR(errno) : "eof");
-		return ret;
-	}
-	if (!ncmds)
-		libt_add_timeout(5, at_timeout, NULL);
-	++ncmds;
-	return ret;
+	if (!cmd_pending)
+		return at_ll_write(buf);
+	/* enter queue */
+	add_strq(buf);
+	return 0;
 }
 
 static void at_csq(void *dat)
@@ -510,7 +557,6 @@ int main(int argc, char *argv[])
 	/* initial sync */
 	at_write("at");
 	ignore_responses = 1;
-	poll(NULL, 0, 10);
 	/* enable echo */
 	at_write("ate1");
 	if (options & O_CSQ)
