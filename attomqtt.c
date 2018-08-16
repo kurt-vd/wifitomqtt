@@ -120,7 +120,6 @@ static void myfree(void *dat)
 /* AT */
 static const char *atdev;
 static int atsock;
-static int ncmds;
 static int ignore_responses;
 static int options;
 static double csq_delay = 10;
@@ -172,11 +171,23 @@ static int at_write(const char *fmt, ...);
 /* low-level write */
 static int at_ll_write(const char *str);
 
+static void at_next_cmd(void)
+{
+	struct str *head;
+
+	head = pop_strq();
+	if (head) {
+		at_ll_write(head->a);
+		free(head);
+	}
+}
+
 static void at_timeout(void *dat)
 {
 	mypublish("fail", "timeout", 0);
 	mylog(LOG_WARNING, "AT command timeout");
-	ncmds = 0;
+	cmd_pending = 0;
+	at_next_cmd();
 }
 
 static void at_recvd_response(int argc, char *argv[])
@@ -266,16 +277,11 @@ static void at_recvd(char *line)
 				!strcmp(str, "NO CARRIER") ||
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
-			struct str *head;
-
+			/* queue admin */
 			cmd_pending = 0;
-			head = pop_strq();
-			if (head) {
-				at_ll_write(head->a);
-				free(head);
-			} else {
-				libt_remove_timeout(at_timeout, NULL);
-			}
+			libt_remove_timeout(at_timeout, NULL);
+			at_next_cmd();
+			/* process this command */
 			if (ignore_responses > 0) {
 				--ignore_responses;
 				goto response_done;
@@ -339,9 +345,21 @@ static int at_write(const char *fmt, ...)
 	return 0;
 }
 
+static void at_ifnotqueued(const char *atcmd)
+{
+	struct str *str;
+
+	for (str = strq; str; str = str->next) {
+		if (!strcmp(atcmd, str->a))
+			return;
+	}
+	/* queue a new entry */
+	at_write("%s", atcmd);
+}
+
 static void at_csq(void *dat)
 {
-	at_write("at+csq");
+	at_ifnotqueued("at+csq");
 	/* repeat */
 	libt_add_timeout(csq_delay, at_csq, dat);
 }
@@ -560,7 +578,7 @@ int main(int argc, char *argv[])
 	/* enable echo */
 	at_write("ate1");
 	if (options & O_CSQ)
-		libt_add_timeout(1, at_csq, NULL);
+		at_csq(NULL);
 	for (;;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
