@@ -109,6 +109,7 @@ static void myfree(void *dat)
 static const char *atdev;
 static int atsock;
 static int ncmds;
+static int ignore_responses;
 
 /* AT iface */
 static void at_timeout(void *dat)
@@ -124,6 +125,8 @@ static void at_recvd_response(int argc, char *argv[])
 		/* unknown command, echo was off? */
 		return;
 	else if (!strcmp(argv[0], "RING")) {
+	} else if (ignore_responses > 0) {
+		--ignore_responses;
 	} else if (strcmp(argv[argc-1], "OK")) {
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
@@ -401,6 +404,9 @@ int main(int argc, char *argv[])
 	pf[1].events = POLL_IN;
 
 	libt_add_timeout(0, do_mqtt_maintenance, mosq);
+	/* initial sync */
+	at_write("at");
+	ignore_responses = 1;
 	/* enable echo */
 	at_write("ate1");
 	while (!sigterm) {
