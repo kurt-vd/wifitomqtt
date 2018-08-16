@@ -203,7 +203,7 @@ static void at_recvd_response(int argc, char *argv[])
 		}
 
 		/* bit-error-rate */
-		ber = strtoul(endp, NULL, 0);
+		ber = strtoul(endp+1, NULL, 0);
 		static const char *const ber_values[] = {
 			[0] = "<0.01%",
 			[1] = "0.01% -- 0.1%",
