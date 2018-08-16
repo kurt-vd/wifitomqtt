@@ -121,6 +121,8 @@ static void at_timeout(void *dat)
 
 static void at_recvd_response(int argc, char *argv[])
 {
+	char *endp;
+
 	if (!strcmp(argv[0], ""))
 		/* unknown command, echo was off? */
 		return;
@@ -198,13 +200,13 @@ static void at_recvd(char *line)
 			/* reconstruct clean packet */
 			for (str = reconstructed, j = 0; j < argc; ++j) {
 				if (j)
-					*str++ = '\n';
+					*str++ = '\t';
 				strcpy(str, argv[j]);
 				str += strlen(str);
 			}
 			*str = 0;
 			/* publish raw response */
-			mypublish("echo", reconstructed, 0);
+			mypublish("at", reconstructed, 0);
 
 			/* process */
 			argv[argc] = NULL;
