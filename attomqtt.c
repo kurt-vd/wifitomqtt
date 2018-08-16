@@ -125,8 +125,6 @@ static void at_recvd_response(int argc, char *argv[])
 		/* unknown command, echo was off? */
 		return;
 	else if (!strcmp(argv[0], "RING")) {
-	} else if (ignore_responses > 0) {
-		--ignore_responses;
 	} else if (strcmp(argv[argc-1], "OK")) {
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
@@ -193,6 +191,10 @@ static void at_recvd(char *line)
 				libt_add_timeout(5, at_timeout, NULL);
 			else
 				libt_remove_timeout(at_timeout, NULL);
+			if (ignore_responses > 0) {
+				--ignore_responses;
+				goto response_done;
+			}
 			/* reconstruct clean packet */
 			for (str = reconstructed, j = 0; j < argc; ++j) {
 				if (j)
@@ -208,6 +210,7 @@ static void at_recvd(char *line)
 			argv[argc] = NULL;
 			at_recvd_response(argc, argv);
 			/* restart response collection */
+response_done:
 			argc = 0;
 		}
 	}
