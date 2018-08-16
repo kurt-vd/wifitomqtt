@@ -150,16 +150,19 @@ static void at_recvd_response(int argc, char *argv[])
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
 	}else if (!strcasecmp(argv[0], "AT+CSQ")) {
+		int rssi, ber;
+
 		/* response[1] is of format: '+CSQ: <RSSI>,<BER>' */
 		if (strncasecmp(argv[1], "+CSQ: ", 6))
 			return;
-		saved_rssi = strtoul(argv[1]+6, &endp, 0);
-		if (saved_rssi == 99)
-			mypublish("rssi", NULL, 1);
-		else
-			mypublish("rssi", valuetostr("%i", -113 + 2*saved_rssi), 1);
+		rssi = strtoul(argv[1]+6, &endp, 0);
+		if (rssi != saved_rssi) {
+			mypublish("rssi", (rssi == 99) ? NULL : valuetostr("%i", -113 + 2*saved_rssi), 1);
+			saved_rssi = rssi;
+		}
+
 		/* bit-error-rate */
-		saved_ber = strtoul(endp, NULL, 0);
+		ber = strtoul(endp, NULL, 0);
 		static const char *const ber_values[] = {
 			[0] = "<0.01%",
 			[1] = "0.01% -- 0.1%",
@@ -169,7 +172,10 @@ static void at_recvd_response(int argc, char *argv[])
 			[5] = "2% -- 4%",
 			[6] = "4% -- 8%",
 		};
-		mypublish("ber", (saved_ber >= sizeof(ber_values)/sizeof(ber_values[0])) ? NULL : ber_values[saved_ber], 1);
+		if (ber != saved_ber) {
+			mypublish("ber", (ber >= sizeof(ber_values)/sizeof(ber_values[0])) ? NULL : ber_values[ber], 1);
+			saved_ber = ber;
+		}
 	}
 }
 
