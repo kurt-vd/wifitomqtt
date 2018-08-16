@@ -57,6 +57,8 @@ static const char help_msg[] =
 	"\n"
 	" -h, --host=HOST[:PORT]Specify alternate MQTT host+port\n"
 	" -p, --prefix=PREFIX	Use MQTT topic prefix (default: net/TTYNAME/)\n"
+	" -o, --options=OPT[,OPT...]	tune additional options\n"
+	"				turn off options that are prefixed with no-\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
@@ -70,13 +72,19 @@ static struct option long_opts[] = {
 
 	{ "host", required_argument, NULL, 'h', },
 	{ "prefix", required_argument, NULL, 'p', },
+
+	{ "options", required_argument, NULL, 'o', },
 	{ },
 };
 #else
 #define getopt_long(argc, argv, optstring, longopts, longindex) \
 	getopt((argc), (argv), (optstring))
 #endif
-static const char optstring[] = "Vv?h:p:";
+static const char optstring[] = "Vv?h:p:o:";
+
+static char *const subopttable[] = {
+	NULL,
+};
 
 /* signal handler */
 static volatile int ready;
@@ -93,6 +101,8 @@ static char *mqtt_prefix;
 static int mqtt_prefix_len;
 
 /* state */
+
+/* utils */
 static struct mosquitto *mosq;
 static void mypublish(const char *bare_topic, const char *value, int retain);
 __attribute__((format(printf,1,2)))
@@ -110,6 +120,7 @@ static const char *atdev;
 static int atsock;
 static int ncmds;
 static int ignore_responses;
+static int options;
 
 /* AT iface */
 static void at_timeout(void *dat)
@@ -314,8 +325,8 @@ static void do_mqtt_maintenance(void *dat)
 
 int main(int argc, char *argv[])
 {
-	int opt, ret;
-	char *str;
+	int opt, ret, not;
+	char *str, *subopts, *savedstr;
 	char mqtt_name[32];
 	struct pollfd pf[3];
 	int sigfd;
@@ -344,6 +355,30 @@ int main(int argc, char *argv[])
 		break;
 	case 'p':
 		mqtt_prefix = optarg;
+		break;
+
+	case 'o':
+		subopts = optarg;
+		while (*subopts) {
+			savedstr = subopts;
+			not = !strncmp(subopts, "no-", 3);
+			if (not)
+				subopts += 3;
+			opt = getsubopt(&subopts, subopttable, &optarg);
+			if (opt < 0) {
+				fprintf(stderr, "%s: option '%s' unknown\n", program_invocation_short_name, savedstr);
+				fputs(help_msg, stderr);
+				return 1;
+			}
+			opt = 1 << opt;
+			/* make sure O_xxx & FL_xxx correspond */
+			if (not)
+				options &= ~opt;
+			else
+				options |= opt;
+			switch (opt) {
+			};
+		}
 		break;
 
 	default:
