@@ -24,8 +24,13 @@ void setmylog(const char *name, int options, int facility, int level)
 	if (!logtostderr && name) {
 		openlog(name, options, facility);
 		setlogmask(LOG_UPTO(level));
-	} else
+	} else {
 		maxloglevel = level;
+		/* we append \n seperately.
+		 * Make stderr line-buffered, so it results in 1 single write
+		 */
+		setlinebuf(stderr);
+	}
 }
 
 void mylog(int loglevel, const char *fmt, ...)
