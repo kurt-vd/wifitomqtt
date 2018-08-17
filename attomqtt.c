@@ -61,6 +61,8 @@ static const char help_msg[] =
 	"				turn off options that are prefixed with no-\n"
 	"	csq[=DELAY]	Enable periodic signal monitor (AT+CSQ)\n"
 	"			AT+CSQ is done once each DELAY seconds (default 10)\n"
+	"	cnti[=DELAY]	Enable periodic technology monitor (AT*CNTI)\n"
+	"			AT*CNTI=0 is done once each DELAY seconds (default 10)\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
@@ -87,6 +89,8 @@ static const char optstring[] = "Vv?h:p:o:";
 static char *const subopttable[] = {
 	"csq",
 #define O_CSQ		(1 << 0)
+	"cnti",
+#define O_CNTI		(1 << 1)
 	NULL,
 };
 
@@ -123,8 +127,10 @@ static int atsock;
 static int ignore_responses;
 static int options;
 static double csq_delay = 10;
+static double cnti_delay = 10;
 /* raw rssi & ber values, 99 equals 'no value' */
 static int saved_rssi = 99, saved_ber = 99;
+static char *saved_nt0;
 
 /* command queue */
 struct str {
@@ -192,7 +198,7 @@ static void at_timeout(void *dat)
 
 static void at_recvd_response(int argc, char *argv[])
 {
-	char *endp;
+	char *endp, *tok;
 
 	if (!strcmp(argv[0], ""))
 		/* unknown command, echo was off? */
@@ -227,6 +233,40 @@ static void at_recvd_response(int argc, char *argv[])
 		if (ber != saved_ber) {
 			mypublish("ber", (ber >= sizeof(ber_values)/sizeof(ber_values[0])) ? NULL : ber_values[ber], 1);
 			saved_ber = ber;
+		}
+	} else if (!strcasecmp(argv[0], "at*cnti=0")) {
+		if (strncasecmp(argv[1], "*cnti: 0,", 9))
+			return;
+		tok = argv[1]+9;
+		if (strcmp(tok, saved_nt0 ?: "")) {
+			myfree(saved_nt0);
+			saved_nt0 = tok ? strdup(tok) : NULL;
+			mypublish("nt", tok, 1);
+		}
+
+	} else if (!strcasecmp(argv[0], "at+cops?")) {
+		char *op;
+
+		if (strncasecmp(argv[1], "+cops: ", 7))
+			return;
+		/* mode,format,"operator",tech */
+		strtok(argv[1], ",");
+		strtok(NULL, ",");
+		op = strtok(NULL, ",");
+		//strtok(NULL, ",");
+		if (op) {
+			int len = strlen(op);
+			if (*op == '"' && op[len-1] == '"') {
+				op[len-1] = 0;
+				++op;
+			} else
+				/* NUMERIC ? */
+				op = NULL;
+		}
+		if (strcmp(op ?: "", saved_op ?: "")) {
+			mypublish("op", op, 1);
+			myfree(saved_op);
+			saved_op = op ? strdup(op) : NULL;
 		}
 	}
 }
@@ -364,6 +404,13 @@ static void at_csq(void *dat)
 	libt_add_timeout(csq_delay, at_csq, dat);
 }
 
+static void at_cnti(void *dat)
+{
+	at_ifnotqueued("at*cnti=0");
+	/* repeat */
+	libt_add_timeout(cnti_delay, at_cnti, dat);
+}
+
 /* MQTT iface */
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
@@ -488,6 +535,10 @@ int main(int argc, char *argv[])
 				if (optarg)
 					csq_delay = strtod(optarg, NULL);
 				break;
+			case O_CNTI:
+				if (optarg)
+					cnti_delay = strtod(optarg, NULL);
+				break;
 			};
 		}
 		break;
@@ -579,6 +630,8 @@ int main(int argc, char *argv[])
 	at_write("ate1");
 	if (options & O_CSQ)
 		at_csq(NULL);
+	if (options & O_CNTI)
+		at_cnti(NULL);
 	for (;;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
@@ -638,6 +691,8 @@ done:
 	if (saved_ber != 99)
 		/* clear rssi */
 		mypublish("ber", NULL, 1);
+	if (saved_nt0)
+		mypublish("nt", NULL, 1);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
