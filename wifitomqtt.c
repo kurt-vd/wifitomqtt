@@ -901,6 +901,15 @@ static void wpa_recvd_pkt(char *line)
 		}
 		wpa_save_config();
 
+	} else if (!mystrncmp("DISABLE_NETWORK all", head->a)) {
+		for (j = 0; j < nnetworks; ++j) {
+			if (!(networks[j].flags & BF_DISABLED)) {
+				networks[j].flags |= BF_DISABLED;
+				network_changed(networks+j, 0);
+			}
+		}
+		wpa_save_config();
+
 	} else if (!mystrncmp("ENABLE_NETWORK ", head->a)) {
 		int idx = strtoul(head->a + 15, NULL, 0);
 		struct network *net = find_network_by_id(idx);
@@ -1014,7 +1023,11 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 		if (!strcmp(toks[3], "set")) {
 			/* select new ssid. Do this only for new msgs (!retained) */
-			if (msg->payloadlen && strcmp(msg->payload, "all")) {
+			if (!msg->payloadlen || !strcmp(msg->payload, "none"))
+				wpa_send("DISABLE_NETWORK all");
+			else if (!strcmp(msg->payload, "all"))
+				wpa_send("ENABLE_NETWORK all");
+			else {
 				struct network *net;
 
 				net = find_network_by_ssid(msg->payload ?: "");
@@ -1024,8 +1037,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 					net->netflags |= NF_SEL;
 				else
 					mylog(LOG_INFO, "selected unknown network '%s'", (char *)msg->payload ?: "");
-			} else
-				wpa_send("ENABLE_NETWORK all");
+			}
 
 		} else if (!strcmp(toks[3], "enable")) {
 			net = find_network_by_ssid((char *)msg->payload);
