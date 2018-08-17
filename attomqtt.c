@@ -201,7 +201,7 @@ static void at_recvd_response(int argc, char *argv[])
 	} else if (strcmp(argv[argc-1], "OK")) {
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
-	}else if (!strcasecmp(argv[0], "AT+CSQ")) {
+	} else if (!strcasecmp(argv[0], "AT+CSQ")) {
 		int rssi, ber;
 
 		/* response[1] is of format: '+CSQ: <RSSI>,<BER>' */
@@ -209,7 +209,7 @@ static void at_recvd_response(int argc, char *argv[])
 			return;
 		rssi = strtoul(argv[1]+6, &endp, 0);
 		if (rssi != saved_rssi) {
-			mypublish("rssi", (rssi == 99) ? NULL : valuetostr("%i", -113 + 2*saved_rssi), 1);
+			mypublish("rssi", (rssi == 99) ? NULL : valuetostr("%i", -113 + 2*rssi), 1);
 			saved_rssi = rssi;
 		}
 
