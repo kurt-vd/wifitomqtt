@@ -349,6 +349,7 @@ static void at_recvd(char *line)
 		argv[argc++] = str;
 		if (!strcmp(str, "OK") ||
 				!strcmp(str, "NO CARRIER") ||
+				!strncmp(str, "+CME ERROR", 10) ||
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
 			/* queue admin */
