@@ -234,11 +234,12 @@ static void at_recvd_response(int argc, char *argv[])
 			mypublish("ber", (ber >= sizeof(ber_values)/sizeof(ber_values[0])) ? NULL : ber_values[ber], 1);
 			saved_ber = ber;
 		}
-	} else if (!strcasecmp(argv[0], "at*cnti=0")) {
+	} else if (!strcasecmp(argv[0], "at*cnti=0") ||
+			!strcasecmp(argv[0], "at*cnti?")) {
 		if (strncasecmp(argv[1], "*cnti: 0,", 9))
 			return;
 		tok = argv[1]+9;
-		if (strcmp(tok, saved_nt0 ?: "")) {
+		if (strcmp(tok ?: "", saved_nt0 ?: "")) {
 			myfree(saved_nt0);
 			saved_nt0 = tok ? strdup(tok) : NULL;
 			mypublish("nt", tok, 1);
