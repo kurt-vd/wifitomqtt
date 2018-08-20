@@ -34,6 +34,7 @@
 #include <termios.h>
 #include <syslog.h>
 #include <sys/signalfd.h>
+#include <sys/uio.h>
 #include <mosquitto.h>
 
 #include "libet/libt.h"
@@ -353,9 +354,13 @@ response_done:
 /* AT API */
 static int at_ll_write(const char *str)
 {
+	struct iovec vec[2] = {
+		[0] = { .iov_base = (void *)str, .iov_len = strlen(str), },
+		[1] = { .iov_base = "\r\n", .iov_len = 2, },
+	};
 	int ret;
 
-	ret = dprintf(atsock, "%s\r\n", str);
+	ret = writev(atsock, vec, 2);
 	if (ret <= 0) {
 		mypublish("fail", valuetostr("dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof"), 0);
 		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof");
