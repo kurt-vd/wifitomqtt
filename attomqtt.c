@@ -310,7 +310,8 @@ static void at_recvd(char *line)
 	char *str, *sep;
 	static char buf[1024*16], reconstructed[1024*16];
 	static int consumed, fill;
-	static char *argv[32];
+#define NARGV 32
+	static char *argv[NARGV];
 	static int argc;
 	int len, j;
 
@@ -347,6 +348,11 @@ static void at_recvd(char *line)
 		}
 		/* collect response */
 		argv[argc++] = str;
+		if (argc > NARGV-1) {
+			/* drop items */
+			--argc;
+			argv[argc-1] = "...";
+		}
 		if (!strcmp(str, "OK") ||
 				!strcmp(str, "NO CARRIER") ||
 				!strncmp(str, "+CME ERROR", 10) ||
