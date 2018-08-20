@@ -92,6 +92,8 @@ static char *const subopttable[] = {
 #define O_CSQ		(1 << 0)
 	"cnti",
 #define O_CNTI		(1 << 1)
+	"cops",
+#define O_COPS		(1 << 2)
 	NULL,
 };
 
@@ -131,6 +133,7 @@ static double csq_delay = 10;
 static double cnti_delay = 10;
 /* raw rssi & ber values, 99 equals 'no value' */
 static int saved_rssi = 99, saved_ber = 99;
+static char *saved_op;
 static char *saved_nt0;
 
 /* command queue */
@@ -199,7 +202,8 @@ static void at_timeout(void *dat)
 
 static void at_recvd_response(int argc, char *argv[])
 {
-	char *endp, *tok;
+	char *endp, *tok, *str;
+	static char buf[1024*16], *pbuf;
 
 	if (!strcmp(argv[0], ""))
 		/* unknown command, echo was off? */
@@ -247,6 +251,7 @@ static void at_recvd_response(int argc, char *argv[])
 		}
 
 	} else if (!strcasecmp(argv[0], "at+cops?")) {
+		/* current operator */
 		char *op;
 
 		if (strncasecmp(argv[1], "+cops: ", 7))
@@ -270,6 +275,33 @@ static void at_recvd_response(int argc, char *argv[])
 			myfree(saved_op);
 			saved_op = op ? strdup(op) : NULL;
 		}
+	} else if (!strcasecmp(argv[0], "at+cops=?")) {
+		/* operator list */
+		int stat;
+		if (strncasecmp(argv[1], "+cops: ", 7))
+			return;
+		str = argv[1]+7;
+		pbuf = buf;
+		for (; *str == '('; str = endp ?: "") {
+			++str;
+			endp = strstr(str, "),");
+			if (endp) {
+				*endp = 0;
+				endp += 2;
+			}
+			/* parse operator */
+			stat = strtoul(strtok(str, ",\""), NULL, 0);
+			tok = strtok(NULL, ",\"");
+			/* append operator to txbuf */
+			if (pbuf > buf)
+				/* insert seperator */
+				*pbuf++ = ',';
+			/* prepend state character: unknown, available, current, not allowed */
+			*pbuf++ = (stat < 4) ? "? *-"[stat] : '?';
+			strcpy(pbuf, tok);
+			pbuf += strlen(pbuf);
+		}
+		mypublish("ops", buf, 0);
 	}
 }
 
@@ -365,8 +397,12 @@ static int at_ll_write(const char *str)
 		mypublish("fail", valuetostr("dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof"), 0);
 		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof");
 	} else {
+		double timeout = 5;
+		if (!strcasecmp(str, "at+cops=?"))
+			/* operator scan takes time */
+			timeout = 60;
 		cmd_pending = 1;
-		libt_add_timeout(5, at_timeout, NULL);
+		libt_add_timeout(timeout, at_timeout, NULL);
 	}
 	return ret;
 }
@@ -415,6 +451,13 @@ static void at_cnti(void *dat)
 	at_ifnotqueued("at*cnti=0");
 	/* repeat */
 	libt_add_timeout(cnti_delay, at_cnti, dat);
+}
+
+static void at_cops(void *dat)
+{
+	at_ifnotqueued("at+cops?");
+	/* repeat */
+	libt_add_timeout(300, at_cops, dat);
 }
 
 /* MQTT iface */
@@ -634,10 +677,16 @@ int main(int argc, char *argv[])
 	ignore_responses = 1;
 	/* enable echo */
 	at_write("ate1");
+	at_write("at+cpin?");
 	if (options & O_CSQ)
 		at_csq(NULL);
 	if (options & O_CNTI)
 		at_cnti(NULL);
+	if (options & O_COPS) {
+		/* set alphanumeric operator names */
+		at_write("at+cops=3,0");
+		at_cops(NULL);
+	}
 	for (;;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
@@ -697,6 +746,8 @@ done:
 	if (saved_ber != 99)
 		/* clear rssi */
 		mypublish("ber", NULL, 1);
+	if (saved_op)
+		mypublish("op", NULL, 1);
 	if (saved_nt0)
 		mypublish("nt", NULL, 1);
 
