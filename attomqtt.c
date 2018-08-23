@@ -144,6 +144,8 @@ struct str {
 
 static struct str *strq, *strqlast;
 static int cmd_pending;
+/* count successive blocked writes */
+static int nsuccessiveblocks;
 
 static void add_strq(const char *a)
 {
@@ -181,14 +183,14 @@ static int at_write(const char *fmt, ...);
 /* low-level write */
 static int at_ll_write(const char *str);
 
-static void at_next_cmd(void)
+static void at_next_cmd(void *dat)
 {
-	struct str *head;
-
-	head = pop_strq();
-	if (head) {
-		at_ll_write(head->a);
-		free(head);
+	if (strq) {
+		if (at_ll_write(strq->a) < 0) {
+			libt_add_timeout(1, at_next_cmd, dat);
+			return;
+		}
+		free(pop_strq());
 	}
 }
 
@@ -197,7 +199,7 @@ static void at_timeout(void *dat)
 	mypublish("fail", "timeout", 0);
 	mylog(LOG_WARNING, "AT command timeout");
 	cmd_pending = 0;
-	at_next_cmd();
+	at_next_cmd(NULL);
 }
 
 static void at_recvd_response(int argc, char *argv[])
@@ -361,7 +363,7 @@ static void at_recvd(char *line)
 			/* queue admin */
 			cmd_pending = 0;
 			libt_remove_timeout(at_timeout, NULL);
-			at_next_cmd();
+			at_next_cmd(NULL);
 			/* process this command */
 			if (ignore_responses > 0) {
 				--ignore_responses;
@@ -400,11 +402,22 @@ static int at_ll_write(const char *str)
 	int ret;
 
 	ret = writev(atsock, vec, 2);
-	if (ret <= 0) {
-		mypublish("fail", valuetostr("dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof"), 0);
-		mylog(LOG_WARNING, "dprintf %s %7s: %s", atdev, str, ret ? ESTR(errno) : "eof");
+	if (ret < 0 && errno == EAGAIN) {
+		/* allow this */
+		if (++nsuccessiveblocks > 10) {
+			mypublish("fail", valuetostr("writev %7s: %i x %s", str, nsuccessiveblocks, ESTR(EAGAIN)), 0);
+			mylog(LOG_ERR, "writev %s %s: %i x %s", atdev, str, nsuccessiveblocks, ESTR(EAGAIN));
+		}
+	} else if (ret < 0) {
+		ret = errno;
+		mypublish("fail", valuetostr("writev %7s: %s", str, ESTR(ret)), 0);
+		mylog(LOG_ERR, "writev %s %7s: %s", atdev, str, ESTR(ret));
+	} else if (ret < vec[0].iov_len+vec[1].iov_len) {
+		mypublish("fail", valuetostr("writev %7s: incomplete", str), 0);
+		mylog(LOG_ERR, "writev %s %7s: incomplete %u/%u", atdev, str, ret, vec[0].iov_len+vec[1].iov_len);
 	} else {
 		double timeout = 5;
+		nsuccessiveblocks = 0;
 		if (!strcasecmp(str, "at+cops=?"))
 			/* operator scan takes time */
 			timeout = 60;
@@ -427,8 +440,13 @@ static int at_write(const char *fmt, ...)
 	if (ret <= 0)
 		return ret;
 
-	if (!cmd_pending)
-		return at_ll_write(buf);
+	if (!cmd_pending && !strq) {
+		if (at_ll_write(buf) >= 0)
+			return 0;
+		/* schedule repeat */
+		libt_add_timeout(1, at_next_cmd, NULL);
+		/* continue, and queue as regular */
+	}
 	/* enter queue */
 	add_strq(buf);
 	return 0;
