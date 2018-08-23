@@ -143,7 +143,6 @@ struct str {
 };
 
 static struct str *strq, *strqlast;
-static int cmd_pending;
 /* count successive blocked writes */
 static int nsuccessiveblocks;
 
@@ -187,18 +186,16 @@ static void at_next_cmd(void *dat)
 {
 	if (strq) {
 		if (at_ll_write(strq->a) < 0) {
+			/* reschedule myself */
 			libt_add_timeout(1, at_next_cmd, dat);
-			return;
 		}
-		free(pop_strq());
 	}
 }
 
 static void at_timeout(void *dat)
 {
-	mypublish("fail", "timeout", 0);
-	mylog(LOG_WARNING, "AT command timeout");
-	cmd_pending = 0;
+	mypublish("fail", valuetostr("%s: timeout", strq->a), 0);
+	mylog(LOG_WARNING, "%s: timeout", strq->a);
 	at_next_cmd(NULL);
 }
 
@@ -368,8 +365,10 @@ static void at_recvd(char *line)
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
 			/* queue admin */
-			cmd_pending = 0;
 			libt_remove_timeout(at_timeout, NULL);
+			/* remove head from queue */
+			free(pop_strq());
+			/* issue next cmd to device */
 			at_next_cmd(NULL);
 			/* process this command */
 			if (ignore_responses > 0) {
@@ -428,7 +427,6 @@ static int at_ll_write(const char *str)
 		if (!strcasecmp(str, "at+cops=?"))
 			/* operator scan takes time */
 			timeout = 60;
-		cmd_pending = 1;
 		libt_add_timeout(timeout, at_timeout, NULL);
 	}
 	return ret;
@@ -447,15 +445,15 @@ static int at_write(const char *fmt, ...)
 	if (ret <= 0)
 		return ret;
 
-	if (!cmd_pending && !strq) {
-		if (at_ll_write(buf) >= 0)
-			return 0;
-		/* schedule repeat */
-		libt_add_timeout(1, at_next_cmd, NULL);
-		/* continue, and queue as regular */
-	}
-	/* enter queue */
+	/* add to queue */
 	add_strq(buf);
+	if (!strq->next) {
+		/* this is first element in the queue,
+		 * write immediately */
+		if (at_ll_write(strq->a) < 0)
+			/* schedule repeat */
+			libt_add_timeout(1, at_next_cmd, NULL);
+	}
 	return 0;
 }
 
