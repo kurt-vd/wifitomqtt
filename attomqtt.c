@@ -207,10 +207,9 @@ static void at_recvd_response(int argc, char *argv[])
 	char *endp, *tok, *str;
 	static char buf[1024*16], *pbuf;
 
-	if (!strcmp(argv[0], ""))
-		/* unknown command, echo was off? */
+	if (strncasecmp(argv[0], "at", 2)) {
+		/* not an AT command feedback */
 		return;
-	else if (!strcmp(argv[0], "RING")) {
 	} else if (strcmp(argv[argc-1], "OK")) {
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
@@ -346,20 +345,22 @@ static void at_recvd(char *line)
 			*end = 0;
 
 		consumed = sep ? sep - buf : fill;
-		if (!strncmp(str, "RING", 4)) {
-			static char *ring_argv[2];
-			/* indicate ring */
-			ring_argv[0] = str;
-			mypublish("echo", argv[0], 0);
-			at_recvd_response(1, ring_argv);
-			continue;
-		}
 		/* collect response */
 		argv[argc++] = str;
 		if (argc > NARGV-1) {
 			/* drop items */
 			--argc;
 			argv[argc-1] = "...";
+		}
+		if (argc == 2 && !strlen(argv[0])) {
+			/* incoming notification */
+			mypublish("at", argv[1], 0);
+			/* process */
+			argv[argc] = NULL;
+			at_recvd_response(argc-1, argv+1);
+			/* restart response collection */
+			argc = 0;
+			continue;
 		}
 		if (!strcmp(str, "OK") ||
 				!strcmp(str, "NO CARRIER") ||
