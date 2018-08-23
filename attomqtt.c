@@ -309,7 +309,7 @@ static void at_recvd_response(int argc, char *argv[])
 
 static void at_recvd(char *line)
 {
-	char *str, *sep;
+	char *str, *sep, *end;
 	static char buf[1024*16], reconstructed[1024*16];
 	static int consumed, fill;
 #define NARGV 32
@@ -339,6 +339,12 @@ static void at_recvd(char *line)
 		/* '*line' indicates we're not eof yet */
 		if (!sep && *line)
 			break;
+		/* strip leading/trailing \r */
+		for (; *str == '\r'; ++str);
+		end = str+strlen(str)-1;
+		for (; end >= str && *end == '\r'; --end)
+			*end = 0;
+
 		consumed = sep ? sep - buf : fill;
 		if (!strncmp(str, "RING", 4)) {
 			static char *ring_argv[2];
@@ -664,14 +670,10 @@ int main(int argc, char *argv[])
 	struct termios tio;
 	if (tcgetattr(atsock, &tio) < 0)
 		mylog(LOG_ERR, "tcgetattr %s failed: %s", atdev, ESTR(errno));
-	/* drop incoming CR
-	 * The idea here is to emit \r\n to the modem
-	 * and to strip \r on the input.
-	 * That makes parser life way simpler!
-	 */
-	tio.c_iflag |= IGNCR;
+	cfmakeraw(&tio);
 	if (tcsetattr(atsock, TCSANOW, &tio) < 0)
 		mylog(LOG_ERR, "tcsetattr %s failed: %s", atdev, ESTR(errno));
+	tcflush(atsock, TCIOFLUSH);
 
 	/* MQTT start */
 	if (mqtt_qos < 0)
