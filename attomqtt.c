@@ -349,16 +349,6 @@ static void at_recvd(char *line)
 			--argc;
 			argv[argc-1] = "...";
 		}
-		if (argc == 2 && !strlen(argv[0])) {
-			/* incoming notification */
-			mypublish("at", argv[1], 0);
-			/* process */
-			argv[argc] = NULL;
-			at_recvd_response(argc-1, argv+1);
-			/* restart response collection */
-			argc = 0;
-			continue;
-		}
 		if (!strcmp(str, "OK") ||
 				!strcmp(str, "NO CARRIER") ||
 				!strncmp(str, "+CME ERROR", 10) ||
@@ -391,6 +381,14 @@ static void at_recvd(char *line)
 			at_recvd_response(argc, argv);
 			/* restart response collection */
 response_done:
+			argc = 0;
+		} else if (argc == 2 && !strlen(argv[0])) {
+			/* incoming notification */
+			mypublish("at", argv[1], 0);
+			/* process */
+			argv[argc] = NULL;
+			at_recvd_response(argc-1, argv+1);
+			/* restart response collection */
 			argc = 0;
 		}
 	}
