@@ -855,6 +855,17 @@ int main(int argc, char *argv[])
 		at_write("at+cops=3,0");
 		at_cops(NULL);
 	}
+
+	/* clear potentially retained values in the broker */
+	mypublish("rssi", NULL, 1);
+	mypublish("ber", NULL, 1);
+	mypublish("op", NULL, 1);
+	mypublish("nt", NULL, 1);
+	mypublish("reg", NULL, 1);
+	mypublish("imsi", NULL, 1);
+	mypublish("iccid", NULL, 1);
+	mypublish("simop", NULL, 1);
+
 	for (;;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
