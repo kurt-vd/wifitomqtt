@@ -138,6 +138,7 @@ static double cnti_delay = 10;
 static int saved_rssi = 99, saved_ber = 99;
 static char *saved_op;
 static char *saved_nt0;
+static const char *saved_reg;
 
 /* command queue */
 struct str {
@@ -235,6 +236,35 @@ static void at_recvd_info(char *str)
 	} else if (!strcasecmp(str, "+simcard: not available")) {
 		/* SIM card lost */
 
+	} else if (!strncasecmp(str, "+creg: ", 7)) {
+		char *chr = strchr(str+7, ',');
+		if (chr)
+			/* reply of at+creg? */
+			str = chr+1;
+		else
+			/* unsolicited response code, no ',' */
+			str = str+7;
+		static const char *const cregs[] = {
+			[0] = "none",
+			[1] = "registered",
+			[2] = "searching",
+			[3] = "denied",
+			[4] = "unknown",
+			[5] = "roaming",
+		};
+
+		int idx = strtoul(str, NULL, 10);
+
+		if (idx >= sizeof(cregs)/sizeof(cregs[0]))
+			idx = 4;
+		if (cregs[idx] != saved_reg) {
+			saved_reg = cregs[idx];
+			mypublish("reg", saved_reg, 1);
+			if (idx == 1 || idx == 5)
+				at_write("at+cops?");
+			else
+				publish_received_property("op", "", &saved_op);
+		}
 	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
 		char *endp;
@@ -717,6 +747,8 @@ int main(int argc, char *argv[])
 	/* enable echo */
 	at_write("ate0");
 	at_write("at+cpin?");
+	at_write("at+creg=1");
+	at_write("at+creg?");
 	if (options & O_CSQ)
 		at_csq(NULL);
 	else if (options & O_AUTOCSQ) {
@@ -793,6 +825,8 @@ done:
 		mypublish("op", NULL, 1);
 	if (saved_nt0)
 		mypublish("nt", NULL, 1);
+	if (saved_reg)
+		mypublish("reg", NULL, 1);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
