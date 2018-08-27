@@ -139,6 +139,8 @@ static int saved_rssi = 99, saved_ber = 99;
 static char *saved_op;
 static char *saved_nt0;
 static const char *saved_reg;
+static char *saved_iccid;
+static char *saved_imsi;
 
 /* command queue */
 struct str {
@@ -232,9 +234,16 @@ static void at_recvd_info(char *str)
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
+			at_write("at+ccid");
+			at_write("at+cimi");
 		}
 	} else if (!strcasecmp(str, "+simcard: not available")) {
 		/* SIM card lost */
+		publish_received_property("iccid", "", &saved_iccid);
+		publish_received_property("imsi", "", &saved_imsi);
+
+	} else if (!strncasecmp(str, "+ccid: ", 7)) {
+		publish_received_property("iccid", strip_quotes(str+7), &saved_iccid);
 
 	} else if (!strncasecmp(str, "+creg: ", 7)) {
 		char *chr = strchr(str+7, ',');
@@ -344,6 +353,8 @@ static void at_recvd_response(int argc, char *argv[])
 		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
 
+	} else if (!strcasecmp(argv[0], "at+cimi")) {
+		publish_received_property("imsi", strip_quotes(argv[1]), &saved_imsi);
 	}
 }
 
@@ -827,6 +838,10 @@ done:
 		mypublish("nt", NULL, 1);
 	if (saved_reg)
 		mypublish("reg", NULL, 1);
+	if (saved_imsi)
+		mypublish("imsi", NULL, 1);
+	if (saved_iccid)
+		mypublish("iccid", NULL, 1);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
