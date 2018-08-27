@@ -142,6 +142,7 @@ static const char *saved_reg;
 static char *saved_iccid;
 static char *saved_imsi;
 static char *saved_simop;
+static int forward_copn = 1;
 
 /* command queue */
 struct str {
@@ -296,6 +297,7 @@ static void at_recvd_info(char *str)
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
 			at_write("at+copn");
+			forward_copn = 0;
 			at_write("at+ccid");
 			at_write("at+cimi");
 		}
@@ -429,6 +431,10 @@ static void at_recvd_response(int argc, char *argv[])
 		publish_received_property("imsi", strip_quotes(argv[1]), &saved_imsi);
 		op = imsi_to_operator(saved_imsi);
 		publish_received_property("simop", op->name, &saved_simop);
+
+	} else if (!strcasecmp(argv[0], "at+copn")) {
+		/* stop blocking copn info */
+		forward_copn = 1;
 	}
 }
 
@@ -477,7 +483,9 @@ static void at_recvd(char *line)
 			/* empty str */
 			continue;
 		if (strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) {
-			mypublish("at", str, 0);
+			/* treat different */
+			if (strncasecmp(str, "+copn: ", 7) || forward_copn)
+				mypublish("at", str, 0);
 			at_recvd_info(str);
 			continue;
 		}
