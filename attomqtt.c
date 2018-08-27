@@ -62,6 +62,7 @@ static const char help_msg[] =
 	"				turn off options that are prefixed with no-\n"
 	"	csq[=DELAY]	Enable periodic signal monitor (AT+CSQ)\n"
 	"			AT+CSQ is done once each DELAY seconds (default 10)\n"
+	"	autocsq		Enable automatic signal reporting (AT+AUTOCSQ=1,1)\n"
 	"	cnti[=DELAY]	Enable periodic technology monitor (AT*CNTI)\n"
 	"			AT*CNTI=0 is done once each DELAY seconds (default 10)\n"
 	"\n"
@@ -94,6 +95,8 @@ static char *const subopttable[] = {
 #define O_CNTI		(1 << 1)
 	"cops",
 #define O_COPS		(1 << 2)
+	"autocsq",
+#define O_AUTOCSQ	(1 << 3)
 	NULL,
 };
 
@@ -716,6 +719,10 @@ int main(int argc, char *argv[])
 	at_write("at+cpin?");
 	if (options & O_CSQ)
 		at_csq(NULL);
+	else if (options & O_AUTOCSQ) {
+		at_write("at+autocsq=1,1");
+		at_write("at+csqdelta=1");
+	}
 	if (options & O_CNTI)
 		at_cnti(NULL);
 	if (options & O_COPS) {
