@@ -560,7 +560,7 @@ static int at_ll_write(const char *str)
 	} else {
 		double timeout = 5;
 		nsuccessiveblocks = 0;
-		if (!strcasecmp(str, "at+cops=?"))
+		if (!strncasecmp(str, "at+cops=", 8))
 			/* operator scan takes time */
 			timeout = 60;
 		libt_add_timeout(timeout, at_timeout, NULL);
