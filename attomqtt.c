@@ -199,24 +199,47 @@ static void at_timeout(void *dat)
 	at_next_cmd(NULL);
 }
 
-static void at_recvd_response(int argc, char *argv[])
+static void publish_received_property(const char *mqttname, const char *str, char **pcache)
 {
-	char *endp, *tok, *str;
-	static char buf[1024*16], *pbuf;
+	if (strcmp(*pcache ?: "", str ?: "")) {
+		myfree(*pcache);
+		*pcache = (str && *str) ? strdup(str) : NULL;
+		mypublish(mqttname, str, 1);
+	}
+}
+static char *strip_quotes(char *str)
+{
+	char *stre;
 
-	if (strncasecmp(argv[0], "at", 2)) {
-		/* not an AT command feedback */
-		return;
-	} else if (strcmp(argv[argc-1], "OK")) {
-		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
-		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
-	} else if (!strcasecmp(argv[0], "AT+CSQ")) {
+	if (str) {
+		stre = str+strlen(str)-1;
+		if (*str == '"' && *stre == '"') {
+			*stre = 0;
+			++str;
+		}
+	}
+	return str;
+}
+
+static void at_recvd_info(char *str)
+{
+	if (!str) {
+
+	} else if (!strncasecmp(str, "+cpin: ", 7)) {
+		if (!strcasecmp(str+7, "ready")) {
+			/* SIM card become ready */
+		}
+	} else if (!strcasecmp(str, "+simcard: not available")) {
+		/* SIM card lost */
+
+	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
+		char *endp;
 
 		/* response[1] is of format: '+CSQ: <RSSI>,<BER>' */
-		if (strncasecmp(argv[1], "+CSQ: ", 6))
+		if (strncasecmp(str, "+CSQ: ", 6))
 			return;
-		rssi = strtoul(argv[1]+6, &endp, 0);
+		rssi = strtoul(str+6, &endp, 0);
 		if (rssi != saved_rssi) {
 			mypublish("rssi", (rssi == 99) ? NULL : valuetostr("%i", -113 + 2*rssi), 1);
 			saved_rssi = rssi;
@@ -237,69 +260,57 @@ static void at_recvd_response(int argc, char *argv[])
 			mypublish("ber", (ber >= sizeof(ber_values)/sizeof(ber_values[0])) ? NULL : ber_values[ber], 1);
 			saved_ber = ber;
 		}
-	} else if (!strcasecmp(argv[0], "at*cnti=0") ||
-			!strcasecmp(argv[0], "at*cnti?")) {
-		if (strncasecmp(argv[1], "*cnti: 0,", 9))
-			return;
-		tok = argv[1]+9;
-		if (strcmp(tok ?: "", saved_nt0 ?: "")) {
-			myfree(saved_nt0);
-			saved_nt0 = tok ? strdup(tok) : NULL;
-			mypublish("nt", tok, 1);
-		}
 
-	} else if (!strcasecmp(argv[0], "at+cops?")) {
-		/* current operator */
-		char *op;
+	} else if (!strncasecmp(str, "*cnti: 0,", 9)) {
+		publish_received_property("nt", str+9, &saved_nt0);
 
-		if (strncasecmp(argv[1], "+cops: ", 7))
-			return;
-		/* mode,format,"operator",tech */
-		strtok(argv[1], ",");
-		strtok(NULL, ",");
-		op = strtok(NULL, ",");
-		//strtok(NULL, ",");
-		if (op) {
-			int len = strlen(op);
-			if (*op == '"' && op[len-1] == '"') {
-				op[len-1] = 0;
-				++op;
-			} else
-				/* NUMERIC ? */
-				op = NULL;
-		}
-		if (strcmp(op ?: "", saved_op ?: "")) {
-			mypublish("op", op, 1);
-			myfree(saved_op);
-			saved_op = op ? strdup(op) : NULL;
-		}
-	} else if (!strcasecmp(argv[0], "at+cops=?")) {
-		/* operator list */
-		int stat;
-		if (strncasecmp(argv[1], "+cops: ", 7))
-			return;
-		str = argv[1]+7;
-		pbuf = buf;
-		for (; *str == '('; str = endp ?: "") {
-			++str;
-			endp = strstr(str, "),");
-			if (endp) {
-				*endp = 0;
-				endp += 2;
+	} else if (!strncasecmp(str, "+cops: ", 7)) {
+		if (str[7] == '(') {
+			/* at+cops=? : return list of operators */
+			static char buf[1024*16];
+			char *pbuf, *endp;
+			int stat;
+
+			pbuf = buf;
+			for (str += 7; *str == '('; str = endp ?: "") {
+				++str;
+				endp = strstr(str, "),");
+				if (endp) {
+					*endp = 0;
+					endp += 2;
+				}
+				/* parse operator */
+				stat = strtoul(strtok(str, ",\""), NULL, 0);
+				/* append operator to txbuf */
+				if (pbuf > buf)
+					/* insert seperator */
+					*pbuf++ = ',';
+				/* prepend state character: unknown, available, current, not allowed */
+				*pbuf++ = (stat < 4) ? "? *-"[stat] : '?';
+				strcpy(pbuf, strip_quotes(strtok(NULL, ",")));
+				pbuf += strlen(pbuf);
 			}
-			/* parse operator */
-			stat = strtoul(strtok(str, ",\""), NULL, 0);
-			tok = strtok(NULL, ",\"");
-			/* append operator to txbuf */
-			if (pbuf > buf)
-				/* insert seperator */
-				*pbuf++ = ',';
-			/* prepend state character: unknown, available, current, not allowed */
-			*pbuf++ = (stat < 4) ? "? *-"[stat] : '?';
-			strcpy(pbuf, tok);
-			pbuf += strlen(pbuf);
+			mypublish("ops", buf, 0);
+		} else {
+			/* at+cops? : return current operator */
+			/* mode,format,"operator",tech */
+			strtok(str+7, ",");
+			strtok(NULL, ",");
+			publish_received_property("op", strip_quotes(strtok(NULL, ",")), &saved_op);
 		}
-		mypublish("ops", buf, 0);
+	}
+}
+
+static void at_recvd_response(int argc, char *argv[])
+{
+	if (strncasecmp(argv[0], "at", 2)) {
+		/* not an AT command feedback */
+		return;
+	/* regular commands ... */
+	} else if (strcmp(argv[argc-1], "OK")) {
+		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
+		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
+
 	}
 }
 
@@ -310,7 +321,7 @@ static void at_recvd(char *line)
 	static int consumed, fill;
 #define NARGV 32
 	static char *argv[NARGV];
-	static int argc;
+	static int argc = 1;
 	int len, j;
 
 	len = strlen(line);
@@ -342,29 +353,24 @@ static void at_recvd(char *line)
 			*end = 0;
 
 		consumed = sep ? sep - buf : fill;
+
+		/* process */
+		if (!*str)
+			/* empty str */
+			continue;
+		if (strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) {
+			mypublish("at", str, 0);
+			at_recvd_info(str);
+			continue;
+		}
 		/* collect response */
 		argv[argc++] = str;
-		if (argc > NARGV-1) {
-			/* drop items */
-			--argc;
-			argv[argc-1] = "...";
-		}
 		if (!strcmp(str, "OK") ||
 				!strcmp(str, "NO CARRIER") ||
 				!strncmp(str, "+CME ERROR", 10) ||
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
-			/* queue admin */
-			libt_remove_timeout(at_timeout, NULL);
-			/* remove head from queue */
-			free(pop_strq());
-			/* issue next cmd to device */
-			at_next_cmd(NULL);
-			/* process this command */
-			if (ignore_responses > 0) {
-				--ignore_responses;
-				goto response_done;
-			}
+			argv[0] = strq ? strq->a : "";
 			/* reconstruct clean packet */
 			for (str = reconstructed, j = 0; j < argc; ++j) {
 				if (j)
@@ -376,20 +382,26 @@ static void at_recvd(char *line)
 			/* publish raw response */
 			mypublish("at", reconstructed, 0);
 
-			/* process */
-			argv[argc] = NULL;
-			at_recvd_response(argc, argv);
+			/* process this command */
+			if (ignore_responses > 0) {
+				--ignore_responses;
+			} else {
+				argv[argc] = NULL;
+				at_recvd_response(argc, argv);
+			}
 			/* restart response collection */
-response_done:
-			argc = 0;
-		} else if (argc == 2 && !strlen(argv[0])) {
-			/* incoming notification */
-			mypublish("at", argv[1], 0);
-			/* process */
-			argv[argc] = NULL;
-			at_recvd_response(argc-1, argv+1);
-			/* restart response collection */
-			argc = 0;
+			argc = 1;
+			/* queue admin */
+			libt_remove_timeout(at_timeout, NULL);
+			/* remove head from queue */
+			free(pop_strq());
+			/* issue next cmd to device */
+			at_next_cmd(NULL);
+
+		} else if (argc >= NARGV-1) {
+			/* drop items */
+			--argc;
+			argv[argc-1] = "...";
 		}
 	}
 	if (consumed >= fill && !argc)
@@ -401,7 +413,7 @@ static int at_ll_write(const char *str)
 {
 	struct iovec vec[2] = {
 		[0] = { .iov_base = (void *)str, .iov_len = strlen(str), },
-		[1] = { .iov_base = "\r\n", .iov_len = 2, },
+		[1] = { .iov_base = "\r", .iov_len = 1, },
 	};
 	int ret;
 
@@ -700,7 +712,7 @@ int main(int argc, char *argv[])
 	at_write("at");
 	ignore_responses = 1;
 	/* enable echo */
-	at_write("ate1");
+	at_write("ate0");
 	at_write("at+cpin?");
 	if (options & O_CSQ)
 		at_csq(NULL);
