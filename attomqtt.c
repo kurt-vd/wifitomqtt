@@ -141,6 +141,7 @@ static char *saved_nt0;
 static const char *saved_reg;
 static char *saved_iccid;
 static char *saved_imsi;
+static char *saved_simop;
 
 /* command queue */
 struct str {
@@ -180,6 +181,66 @@ static struct str *pop_strq(void)
 	if (!strq)
 		strqlast = NULL;
 	return head;
+}
+
+/* operators */
+struct operator {
+	struct operator *next;
+	char id[8];
+	int idlen;
+	char name[2];
+};
+
+static struct operator *operators;
+
+static struct operator *imsi_to_operator(const char *imsi);
+static struct operator *add_operator(const char *id, const char *name)
+{
+	int len;
+	struct operator *op;
+
+	/* avoid duplicates */
+	op = imsi_to_operator(id);
+	if (op)
+		return op;
+
+	/* add new entry */
+	len = strlen(name ?: "");
+	op = malloc(sizeof(*op) + len);
+	if (!op)
+		mylog(LOG_ERR, "malloc %u: %s", sizeof(*op)+len, ESTR(errno));
+	memset(op, 0, sizeof(*op));
+	strncpy(op->id, id, sizeof(op->id));
+	op->idlen = strlen(op->id);
+	strcpy(op->name, name);
+
+	/* add */
+	op->next = operators;
+	operators = op;
+	/* ready */
+	return op;
+}
+
+static void free_operators(void)
+{
+	struct operator *curr;
+
+	for (; operators; ) {
+		curr = operators;
+		operators = curr->next;
+		free(curr);
+	}
+}
+
+static struct operator *imsi_to_operator(const char *imsi)
+{
+	struct operator *op;
+
+	for (op = operators; op; op = op->next) {
+		if (!strncmp(imsi, op->id, op->idlen))
+			return op;
+	}
+	return NULL;
 }
 
 /* AT iface */
@@ -234,6 +295,7 @@ static void at_recvd_info(char *str)
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
+			at_write("at+copn");
 			at_write("at+ccid");
 			at_write("at+cimi");
 		}
@@ -241,6 +303,8 @@ static void at_recvd_info(char *str)
 		/* SIM card lost */
 		publish_received_property("iccid", "", &saved_iccid);
 		publish_received_property("imsi", "", &saved_imsi);
+		publish_received_property("simop", "", &saved_simop);
+		free_operators();
 
 	} else if (!strncasecmp(str, "+ccid: ", 7)) {
 		publish_received_property("iccid", strip_quotes(str+7), &saved_iccid);
@@ -340,6 +404,12 @@ static void at_recvd_info(char *str)
 			strtok(NULL, ",");
 			publish_received_property("op", strip_quotes(strtok(NULL, ",")), &saved_op);
 		}
+	} else if (!strncasecmp(str, "+copn: ", 7)) {
+		char *num, *name;
+
+		num = strip_quotes(strtok(str+7, ","));
+		name = strip_quotes(strtok(NULL, ","));
+		add_operator(num, name);
 	}
 }
 
@@ -354,7 +424,11 @@ static void at_recvd_response(int argc, char *argv[])
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
 
 	} else if (!strcasecmp(argv[0], "at+cimi")) {
+		const struct operator *op;
+
 		publish_received_property("imsi", strip_quotes(argv[1]), &saved_imsi);
+		op = imsi_to_operator(saved_imsi);
+		publish_received_property("simop", op->name, &saved_simop);
 	}
 }
 
@@ -842,6 +916,8 @@ done:
 		mypublish("imsi", NULL, 1);
 	if (saved_iccid)
 		mypublish("iccid", NULL, 1);
+	if (saved_simop)
+		mypublish("simop", NULL, 1);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
