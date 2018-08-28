@@ -142,6 +142,7 @@ static const char *saved_reg;
 static char *saved_iccid;
 static char *saved_imsi;
 static char *saved_simop;
+static char *saved_simopid;
 static int forward_copn = 1;
 
 /* command queue */
@@ -306,6 +307,7 @@ static void at_recvd_info(char *str)
 		publish_received_property("iccid", "", &saved_iccid);
 		publish_received_property("imsi", "", &saved_imsi);
 		publish_received_property("simop", "", &saved_simop);
+		publish_received_property("simopid", "", &saved_simopid);
 		free_operators();
 
 	} else if (!strncasecmp(str, "+ccid: ", 7)) {
@@ -431,6 +433,7 @@ static void at_recvd_response(int argc, char *argv[])
 		publish_received_property("imsi", strip_quotes(argv[1]), &saved_imsi);
 		op = imsi_to_operator(saved_imsi);
 		publish_received_property("simop", op->name, &saved_simop);
+		publish_received_property("simopid", op->id, &saved_simopid);
 
 	} else if (!strcasecmp(argv[0], "at+copn")) {
 		/* stop blocking copn info */
@@ -869,6 +872,7 @@ int main(int argc, char *argv[])
 	mypublish("imsi", NULL, 1);
 	mypublish("iccid", NULL, 1);
 	mypublish("simop", NULL, 1);
+	mypublish("simopid", NULL, 1);
 
 	for (;;) {
 		libt_flush();
@@ -941,6 +945,8 @@ done:
 		mypublish("iccid", NULL, 1);
 	if (saved_simop)
 		mypublish("simop", NULL, 1);
+	if (saved_simopid)
+		mypublish("simopid", NULL, 1);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
