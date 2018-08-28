@@ -485,7 +485,7 @@ static void at_recvd(char *line)
 		if (strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) {
 			/* treat different */
 			if (strncasecmp(str, "+copn: ", 7) || forward_copn)
-				mypublish("at", str, 0);
+				mypublish("raw/at", str, 0);
 			at_recvd_info(str);
 			continue;
 		}
@@ -506,7 +506,7 @@ static void at_recvd(char *line)
 			}
 			*str = 0;
 			/* publish raw response */
-			mypublish("at", reconstructed, 0);
+			mypublish("raw/at", reconstructed, 0);
 
 			/* process this command */
 			if (ignore_responses > 0) {
@@ -637,7 +637,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 	if (strncmp(mqtt_prefix, msg->topic, mqtt_prefix_len))
 		return;
 
-	if (!strcmp(msg->topic+mqtt_prefix_len, "at/set"))
+	if (!strcmp(msg->topic+mqtt_prefix_len, "raw/send"))
 		at_write("%s", (char *)msg->payload);
 }
 
@@ -823,7 +823,7 @@ int main(int argc, char *argv[])
 	if (ret)
 		mylog(LOG_ERR, "mosquitto_connect %s:%i: %s", mqtt_host, mqtt_port, mosquitto_strerror(ret));
 	mosquitto_message_callback_set(mosq, my_mqtt_msg);
-	subscribe_topic("%sat/set", mqtt_prefix);
+	subscribe_topic("%sraw/send", mqtt_prefix);
 
 	/* prepare poll */
 	pf[0].fd = atsock;
