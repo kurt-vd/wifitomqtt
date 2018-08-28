@@ -639,6 +639,9 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 	if (!strcmp(msg->topic+mqtt_prefix_len, "raw/send"))
 		at_write("%s", (char *)msg->payload);
+
+	else if (!strcmp(msg->topic+mqtt_prefix_len, "ops/scan"))
+		at_ifnotqueued("at+cops=?");
 }
 
 static const char *valuetostr(const char *fmt, ...)
@@ -824,6 +827,7 @@ int main(int argc, char *argv[])
 		mylog(LOG_ERR, "mosquitto_connect %s:%i: %s", mqtt_host, mqtt_port, mosquitto_strerror(ret));
 	mosquitto_message_callback_set(mosq, my_mqtt_msg);
 	subscribe_topic("%sraw/send", mqtt_prefix);
+	subscribe_topic("%sops/scan", mqtt_prefix);
 
 	/* prepare poll */
 	pf[0].fd = atsock;
