@@ -311,10 +311,10 @@ static void at_recvd_info(char *str)
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
-			if (at_ifnotqueued("at+copn"))
-				++my_copn;
 			at_write("at+ccid");
 			at_write("at+cimi");
+			if (at_ifnotqueued("at+copn"))
+				++my_copn;
 		}
 	} else if (!strcasecmp(str, "+simcard: not available")) {
 		/* SIM card lost */
@@ -439,8 +439,13 @@ static void at_recvd_info(char *str)
 		num = strip_quotes(strtok(str+7, ","));
 		name = strip_quotes(strtok(NULL, ","));
 		add_operator(num, name);
-		if (saved_opid && !saved_op && !strcmp(saved_opid, num))
-			/* publish operator name too */
+		if (!saved_simopid && saved_imsi && !strncmp(saved_imsi, num, strlen(num))) {
+			/* publish sim operator */
+			publish_received_property("simopid", num, &saved_simopid);
+			publish_received_property("simop", name, &saved_simop);
+		}
+		if (saved_opid && !saved_op && !strcmp(saved_opid ?: "", num ?: ""))
+			/* publish operator name */
 			publish_received_property("op", name, &saved_op);
 	}
 }
@@ -460,8 +465,10 @@ static void at_recvd_response(int argc, char *argv[])
 
 		publish_received_property("imsi", strip_quotes(argv[1]), &saved_imsi);
 		op = imsi_to_operator(saved_imsi);
-		publish_received_property("simop", op->name, &saved_simop);
-		publish_received_property("simopid", op->id, &saved_simopid);
+		if (op) {
+			publish_received_property("simop", op->name, &saved_simop);
+			publish_received_property("simopid", op->id, &saved_simopid);
+		}
 		mypublish("ops", "", 0);
 
 	} else if (!strcasecmp(argv[0], "at+copn")) {
