@@ -305,8 +305,8 @@ static void at_recvd_info(char *str)
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
-			at_write("at+copn");
-			++my_copn;
+			if (at_ifnotqueued("at+copn"))
+				++my_copn;
 			at_write("at+ccid");
 			at_write("at+cimi");
 		}
@@ -422,11 +422,10 @@ static void at_recvd_info(char *str)
 			struct operator *op = opid_to_operator(saved_opid);
 			if (op)
 				publish_received_property("op", op->name, &saved_op);
-			else {
-				/* schedule new operator names request */
-				at_write("at+copn");
+
+			else if (at_ifnotqueued("at+copn"))
+				/* scheduled new operator names request */
 				++my_copn;
-			}
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
 		char *num, *name;
