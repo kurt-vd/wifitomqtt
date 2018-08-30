@@ -255,6 +255,7 @@ static struct operator *imsi_to_operator(const char *imsi)
 /* AT iface */
 __attribute__((format(printf,1,2)))
 static int at_write(const char *fmt, ...);
+static int at_ifnotqueued(const char *atcmd);
 /* low-level write */
 static int at_ll_write(const char *str);
 
@@ -619,16 +620,17 @@ static int at_write(const char *fmt, ...)
 	return 0;
 }
 
-static void at_ifnotqueued(const char *atcmd)
+static int at_ifnotqueued(const char *atcmd)
 {
 	struct str *str;
 
 	for (str = strq; str; str = str->next) {
 		if (!strcmp(atcmd, str->a))
-			return;
+			return 0;
 	}
 	/* queue a new entry */
 	at_write("%s", atcmd);
+	return 1;
 }
 
 static void at_csq(void *dat)
