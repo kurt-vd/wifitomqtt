@@ -388,6 +388,7 @@ static void at_recvd_info(char *str)
 			/* at+cops=? : return list of operators */
 			static char buf[1024*16];
 			char *pbuf, *endp;
+			char *name, *id;
 			int stat;
 
 			pbuf = buf;
@@ -400,14 +401,14 @@ static void at_recvd_info(char *str)
 				}
 				/* parse operator */
 				stat = strtoul(strtok(str, ",\""), NULL, 0);
+				name = strip_quotes(strtok(NULL, ","));
+				strtok(NULL, ",");
+				id = strip_quotes(strtok(NULL, ","));
+
 				/* append operator to txbuf */
-				if (pbuf > buf)
-					/* insert seperator */
-					*pbuf++ = ',';
-				/* prepend state character: unknown, available, current, not allowed */
-				*pbuf++ = (stat < 4) ? "? *-"[stat] : '?';
-				strcpy(pbuf, strip_quotes(strtok(NULL, ",")));
-				pbuf += strlen(pbuf);
+				pbuf += sprintf(pbuf, "%s%c%s:%s", (pbuf > buf) ? "," : "",
+						(stat < 4) ? "? *-"[stat] : '?',
+						id, name);
 			}
 			mypublish("ops", buf, 0);
 		} else {
