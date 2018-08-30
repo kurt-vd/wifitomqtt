@@ -196,13 +196,19 @@ struct operator {
 static struct operator *operators;
 
 static struct operator *imsi_to_operator(const char *imsi);
+static inline struct operator *opid_to_operator(const char *id)
+{
+	/* this lookup is almost just the same as for imsi */
+	return imsi_to_operator(id);
+}
+
 static struct operator *add_operator(const char *id, const char *name)
 {
 	int len;
 	struct operator *op;
 
 	/* avoid duplicates */
-	op = imsi_to_operator(id);
+	op = opid_to_operator(id);
 	if (op)
 		return op;
 
