@@ -137,6 +137,7 @@ static double cnti_delay = 10;
 /* raw rssi & ber values, 99 equals 'no value' */
 static int saved_rssi = 99, saved_ber = 99;
 static char *saved_op;
+static char *saved_opid;
 static char *saved_nt0;
 static const char *saved_reg;
 static char *saved_iccid;
@@ -345,8 +346,10 @@ static void at_recvd_info(char *str)
 			mypublish("reg", saved_reg, 1);
 			if (idx == 1 || idx == 5)
 				at_write("at+cops?");
-			else
+			else {
 				publish_received_property("op", "", &saved_op);
+				publish_received_property("opid", "", &saved_op);
+			}
 		}
 	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
@@ -412,7 +415,16 @@ static void at_recvd_info(char *str)
 			/* mode,format,"operator",tech */
 			strtok(str+7, ",");
 			strtok(NULL, ",");
-			publish_received_property("op", strip_quotes(strtok(NULL, ",")), &saved_op);
+			publish_received_property("opid", strip_quotes(strtok(NULL, ",")), &saved_opid);
+
+			struct operator *op = opid_to_operator(saved_opid);
+			if (op)
+				publish_received_property("op", op->name, &saved_op);
+			else {
+				/* schedule new operator names request */
+				at_write("at+copn");
+				forward_copn = 0;
+			}
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
 		char *num, *name;
@@ -420,6 +432,9 @@ static void at_recvd_info(char *str)
 		num = strip_quotes(strtok(str+7, ","));
 		name = strip_quotes(strtok(NULL, ","));
 		add_operator(num, name);
+		if (saved_opid && !saved_op && !strcmp(saved_opid, num))
+			/* publish operator name too */
+			publish_received_property("op", name, &saved_op);
 	}
 }
 
@@ -865,7 +880,7 @@ int main(int argc, char *argv[])
 		at_cnti(NULL);
 	if (options & O_COPS) {
 		/* set alphanumeric operator names */
-		at_write("at+cops=3,0");
+		at_write("at+cops=3,2");
 		at_cops(NULL);
 	}
 
@@ -873,6 +888,7 @@ int main(int argc, char *argv[])
 	mypublish("rssi", NULL, 1);
 	mypublish("ber", NULL, 1);
 	mypublish("op", NULL, 1);
+	mypublish("opid", NULL, 1);
 	mypublish("nt", NULL, 1);
 	mypublish("reg", NULL, 1);
 	mypublish("imsi", NULL, 1);
@@ -941,6 +957,8 @@ done:
 		mypublish("ber", NULL, 1);
 	if (saved_op)
 		mypublish("op", NULL, 1);
+	if (saved_opid)
+		mypublish("opid", NULL, 1);
 	if (saved_nt0)
 		mypublish("nt", NULL, 1);
 	if (saved_reg)
