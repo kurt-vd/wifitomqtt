@@ -144,7 +144,7 @@ static char *saved_iccid;
 static char *saved_imsi;
 static char *saved_simop;
 static char *saved_simopid;
-static int forward_copn = 1;
+static int my_copn = 0;
 
 /* command queue */
 struct str {
@@ -305,7 +305,7 @@ static void at_recvd_info(char *str)
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
 			at_write("at+copn");
-			forward_copn = 0;
+			++my_copn;
 			at_write("at+ccid");
 			at_write("at+cimi");
 		}
@@ -424,7 +424,7 @@ static void at_recvd_info(char *str)
 			else {
 				/* schedule new operator names request */
 				at_write("at+copn");
-				forward_copn = 0;
+				++my_copn;
 			}
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
@@ -459,7 +459,8 @@ static void at_recvd_response(int argc, char *argv[])
 
 	} else if (!strcasecmp(argv[0], "at+copn")) {
 		/* stop blocking copn info */
-		forward_copn = 1;
+		if (--my_copn < 0)
+			my_copn = 0;
 	}
 }
 
@@ -509,7 +510,7 @@ static void at_recvd(char *line)
 			continue;
 		if (strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) {
 			/* treat different */
-			if (strncasecmp(str, "+copn: ", 7) || forward_copn)
+			if (strncasecmp(str, "+copn: ", 7) || !my_copn)
 				mypublish("raw/at", str, 0);
 			at_recvd_info(str);
 			continue;
