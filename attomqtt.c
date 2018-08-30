@@ -456,6 +456,7 @@ static void at_recvd_response(int argc, char *argv[])
 		op = imsi_to_operator(saved_imsi);
 		publish_received_property("simop", op->name, &saved_simop);
 		publish_received_property("simopid", op->id, &saved_simopid);
+		mypublish("ops", "", 0);
 
 	} else if (!strcasecmp(argv[0], "at+copn")) {
 		/* stop blocking copn info */
@@ -898,6 +899,8 @@ int main(int argc, char *argv[])
 	mypublish("iccid", NULL, 1);
 	mypublish("simop", NULL, 1);
 	mypublish("simopid", NULL, 1);
+	/* make sure to remove any retained scan results, set retained */
+	mypublish("ops", "", 1);
 
 	for (;;) {
 		libt_flush();
@@ -974,6 +977,7 @@ done:
 		mypublish("simop", NULL, 1);
 	if (saved_simopid)
 		mypublish("simopid", NULL, 1);
+	mypublish("ops", "", 0);
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
