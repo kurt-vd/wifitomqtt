@@ -492,7 +492,7 @@ static void at_recvd(char *line)
 	if (fill+len+1 >= sizeof(buf) && consumed) {
 		memmove(buf, buf+consumed, fill+1-consumed);
 		/* adapt the strings in argv for the new position */
-		for (j = 0; j < argc; ++j)
+		for (j = 1; j < argc; ++j)
 			argv[j] -= consumed;
 		fill -= consumed;
 		consumed = 0;
@@ -536,10 +536,11 @@ static void at_recvd(char *line)
 				!strncmp(str, "+CME ERROR", 10) ||
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
+			int skip = strq ? 0 : 1;
 			argv[0] = strq ? strq->a : "";
 			/* reconstruct clean packet */
-			for (str = reconstructed, j = 0; j < argc; ++j) {
-				if (j)
+			for (str = reconstructed, j = skip; j < argc; ++j) {
+				if (j > skip)
 					*str++ = '\t';
 				strcpy(str, argv[j]);
 				str += strlen(str);
@@ -553,7 +554,7 @@ static void at_recvd(char *line)
 				--ignore_responses;
 			} else {
 				argv[argc] = NULL;
-				at_recvd_response(argc, argv);
+				at_recvd_response(argc-skip, argv+skip);
 			}
 			/* restart response collection */
 			argc = 1;
@@ -570,7 +571,7 @@ static void at_recvd(char *line)
 			argv[argc-1] = "...";
 		}
 	}
-	if (consumed >= fill && !argc)
+	if (consumed >= fill && argc <= 1)
 		consumed = fill = 0;
 }
 
