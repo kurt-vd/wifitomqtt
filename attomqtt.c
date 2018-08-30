@@ -63,8 +63,10 @@ static const char help_msg[] =
 	"	csq[=DELAY]	Enable periodic signal monitor (AT+CSQ)\n"
 	"			AT+CSQ is done once each DELAY seconds (default 10)\n"
 	"	autocsq		Enable automatic signal reporting (AT+AUTOCSQ=1,1)\n"
+	"	creg[=DELAY]	Enable periodic Registration monitoring\n"
 	"	cnti[=DELAY]	Enable periodic technology monitor (AT*CNTI)\n"
 	"			AT*CNTI=0 is done once each DELAY seconds (default 10)\n"
+	"	cops[=DELAY]	Enable periodic operator monitoring\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
@@ -97,6 +99,8 @@ static char *const subopttable[] = {
 #define O_COPS		(1 << 2)
 	"autocsq",
 #define O_AUTOCSQ	(1 << 3)
+	"creg",
+#define O_CREG		(1 << 4)
 	NULL,
 };
 
@@ -134,6 +138,8 @@ static int ignore_responses;
 static int options;
 static double csq_delay = 10;
 static double cnti_delay = 10;
+static double creg_delay = 10;
+static double cops_delay = 60;
 /* raw rssi & ber values, 99 equals 'no value' */
 static int saved_rssi = 99, saved_ber = 99;
 static char *saved_op;
@@ -633,6 +639,13 @@ static int at_ifnotqueued(const char *atcmd)
 	return 1;
 }
 
+static void at_creg(void *dat)
+{
+	at_ifnotqueued("at+creg?");
+	/* repeat */
+	libt_add_timeout(creg_delay, at_creg, dat);
+}
+
 static void at_csq(void *dat)
 {
 	at_ifnotqueued("at+csq");
@@ -651,7 +664,7 @@ static void at_cops(void *dat)
 {
 	at_ifnotqueued("at+cops?");
 	/* repeat */
-	libt_add_timeout(300, at_cops, dat);
+	libt_add_timeout(cops_delay, at_cops, dat);
 }
 
 /* MQTT iface */
@@ -785,6 +798,14 @@ int main(int argc, char *argv[])
 				if (optarg)
 					cnti_delay = strtod(optarg, NULL);
 				break;
+			case O_CREG:
+				if (optarg)
+					creg_delay = strtod(optarg, NULL);
+				break;
+			case O_COPS:
+				if (optarg)
+					cops_delay = strtod(optarg, NULL);
+				break;
 			};
 		}
 		break;
@@ -872,21 +893,25 @@ int main(int argc, char *argv[])
 	/* enable echo */
 	at_write("ate0");
 	at_write("at+cpin?");
-	at_write("at+creg=1");
-	at_write("at+creg?");
+	if (options & O_CREG)
+		at_creg(NULL);
+	else
+		at_write("at+creg?");
 	if (options & O_CSQ)
 		at_csq(NULL);
 	else if (options & O_AUTOCSQ) {
 		at_write("at+autocsq=1,1");
 		at_write("at+csqdelta=1");
-	}
+	} else
+		at_write("at+csq");
 	if (options & O_CNTI)
 		at_cnti(NULL);
-	if (options & O_COPS) {
-		/* set alphanumeric operator names */
-		at_write("at+cops=3,2");
+	/* set alphanumeric operator names */
+	at_write("at+cops=3,2");
+	if (options & O_COPS)
 		at_cops(NULL);
-	}
+	else
+		at_write("at+cops?");
 
 	/* clear potentially retained values in the broker */
 	mypublish("rssi", NULL, 1);
