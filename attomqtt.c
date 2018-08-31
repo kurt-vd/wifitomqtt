@@ -165,6 +165,9 @@ static char *saved_brand;
 static char *saved_model;
 static char *saved_rev;
 
+static void changed_brand(void);
+static void changed_model(void);
+
 /* command queue */
 struct str {
 	struct str *next;
@@ -303,6 +306,11 @@ static void publish_received_property(const char *mqttname, const char *str, cha
 		myfree(*pcache);
 		*pcache = (str && *str) ? strdup(str) : NULL;
 		mypublish(mqttname, str, 1);
+
+		if (pcache == &saved_brand)
+			changed_brand();
+		else if (pcache == &saved_model)
+			changed_model();
 	}
 }
 static char *strip_quotes(char *str)
@@ -1131,4 +1139,47 @@ done:
 	mosquitto_lib_cleanup();
 #endif
 	return 0;
+}
+
+struct quirck {
+	int option;
+	const char *needle;
+	const char *desc;
+};
+
+static void test_quircks(const char *haystack, const struct quirck *q)
+{
+	for (; q->desc; ++q) {
+		if (changed_options & q->option)
+			/* changed in program options */
+			continue;
+		if (strstr(haystack, q->needle)) {
+			if (!(options & q->option)) {
+				options |= q->option;
+				mylog(LOG_WARNING, "enabled %s", q->desc);
+			}
+		} else if (options & q->option) {
+			options &= ~q->option;
+			mylog(LOG_WARNING, "disabled %s", q->desc);
+		}
+	}
+}
+
+static struct quirck brand_quircks[] = {
+	{ O_SIMCOM, "SIMCOM", "simcom", },
+	{},
+};
+static void changed_brand(void)
+{
+	test_quircks(saved_brand ?: "", brand_quircks);
+}
+
+static struct quirck model_quircks[] = {
+	{ O_DETACHEDSCAN, "SIM75", "detached scan", },
+	{},
+};
+
+static void changed_model(void)
+{
+	test_quircks(saved_model ?: "", model_quircks);
 }
