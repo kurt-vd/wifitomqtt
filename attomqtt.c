@@ -70,6 +70,7 @@ static const char help_msg[] =
 	"	simcom		Enable hack that waits for 'SMS DONE' EONS report after\n"
 	"			unsolicited '+SIM: READY', since simcom modems throw those EONS report\n"
 	"			in between regular output\n"
+	"	detachedscan	Run scan when modem is not registered, i.e. detach before scan\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
@@ -106,6 +107,8 @@ static char *const subopttable[] = {
 #define O_CREG		(1 << 4)
 	"simcom",
 #define O_SIMCOM	(1 << 5)
+	"detachedscan",
+#define O_DETACHEDSCAN	(1 << 6)
 	NULL,
 };
 
@@ -757,8 +760,12 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 	if (!strcmp(msg->topic+mqtt_prefix_len, "raw/send"))
 		at_write("%s", (char *)msg->payload);
 
-	else if (!strcmp(msg->topic+mqtt_prefix_len, "ops/scan"))
-		at_ifnotqueued("at+cops=?");
+	else if (!strcmp(msg->topic+mqtt_prefix_len, "ops/scan")) {
+		if (options & O_DETACHEDSCAN) {
+			at_write("%s", "at+cops=2");
+			at_write("at+cops=?");
+		}
+	}
 }
 
 static const char *valuetostr(const char *fmt, ...)
