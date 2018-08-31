@@ -446,10 +446,6 @@ issue_at_copn:
 			struct operator *op = opid_to_operator(saved_opid);
 			if (op)
 				publish_received_property("op", op->name, &saved_op);
-
-			else if (at_ifnotqueued("at+copn"))
-				/* scheduled new operator names request */
-				++my_copn;
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
 		char *num, *name;
