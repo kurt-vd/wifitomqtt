@@ -156,6 +156,7 @@ static char *saved_imsi;
 static char *saved_simop;
 static char *saved_simopid;
 static int my_copn = 0;
+static int scan_ok;
 
 /* command queue */
 struct str {
@@ -338,8 +339,11 @@ issue_at_copn:
 		/* SIM card lost */
 		publish_received_property("iccid", "", &saved_iccid);
 		publish_received_property("imsi", "", &saved_imsi);
+		publish_received_property("op", "", &saved_simop);
+		publish_received_property("opid", "", &saved_simopid);
 		publish_received_property("simop", "", &saved_simop);
 		publish_received_property("simopid", "", &saved_simopid);
+		mypublish("ops", "", 0);
 		free_operators();
 
 	} else if (!strncasecmp(str, "+ccid: ", 7)) {
@@ -436,6 +440,7 @@ issue_at_copn:
 						id, name);
 			}
 			mypublish("ops", buf, 0);
+			scan_ok = 1;
 		} else {
 			/* at+cops? : return current operator */
 			/* mode,format,"operator",tech */
@@ -449,18 +454,20 @@ issue_at_copn:
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
 		char *num, *name;
+		struct operator *op;
 
 		num = strip_quotes(strtok(str+7, ","));
 		name = strip_quotes(strtok(NULL, ","));
-		add_operator(num, name);
-		if (!saved_simopid && saved_imsi && !strncmp(saved_imsi, num, strlen(num))) {
+		op = add_operator(num, name);
+		if (!saved_simopid && saved_imsi && op && !strncmp(saved_imsi, op->id, op->idlen)) {
 			/* publish sim operator */
-			publish_received_property("simopid", num, &saved_simopid);
-			publish_received_property("simop", name, &saved_simop);
+			publish_received_property("simopid", op->id, &saved_simopid);
+			publish_received_property("simop", op->name, &saved_simop);
 		}
-		if (saved_opid && !saved_op && !strcmp(saved_opid ?: "", num ?: ""))
+		if (saved_opid && !saved_op && op && !strcmp(saved_opid, op->id))
 			/* publish operator name */
-			publish_received_property("op", name, &saved_op);
+			publish_received_property("op", op->name, &saved_op);
+
 	}
 }
 
@@ -483,7 +490,6 @@ static void at_recvd_response(int argc, char *argv[])
 			publish_received_property("simop", op->name, &saved_simop);
 			publish_received_property("simopid", op->id, &saved_simopid);
 		}
-		mypublish("ops", "", 0);
 
 	} else if (!strcasecmp(argv[0], "at+copn")) {
 		/* stop blocking copn info */
@@ -498,6 +504,11 @@ static void at_recvd_response(int argc, char *argv[])
 			strncpy(simopid, saved_imsi, 5);
 			publish_received_property("simopid", simopid, &saved_simopid);
 		}
+	} else if (!strcasecmp(argv[0], "at+cops=?")) {
+		/* scan finalized without result */
+		if (!scan_ok)
+			mypublish("ops", "", 0);
+
 	}
 }
 
@@ -625,7 +636,10 @@ static int at_ll_write(const char *str)
 	} else {
 		double timeout = 5;
 		nsuccessiveblocks = 0;
-		if (!strncasecmp(str, "at+cops=", 8))
+		if (!strcasecmp(str, "at+cops=?")) {
+			scan_ok = 0;
+			timeout = 180;
+		} else if (!strncasecmp(str, "at+cops=", 8))
 			/* operator scan takes time */
 			timeout = 60;
 		libt_add_timeout(timeout, at_timeout, NULL);
