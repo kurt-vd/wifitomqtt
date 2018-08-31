@@ -322,6 +322,7 @@ static void at_recvd_info(char *str)
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
+			at_write("at+cspn?");
 			at_write("at+ccid");
 			at_write("at+cimi");
 			if ((options & O_SIMCOM) &&
@@ -348,6 +349,9 @@ issue_at_copn:
 		publish_received_property("simopid", "", &saved_simopid);
 		mypublish("ops", "", 0);
 		free_operators();
+
+	} else if (!strncasecmp(str, "+cspn: ", 7)) {
+		publish_received_property("simop", strip_quotes(strtok(str+7, ",")), &saved_simop);
 
 	} else if (!strncasecmp(str, "+ccid: ", 7)) {
 		publish_received_property("iccid", strip_quotes(str+7), &saved_iccid);
@@ -465,7 +469,9 @@ issue_at_copn:
 		if (!saved_simopid && saved_imsi && op && !strncmp(saved_imsi, op->id, op->idlen)) {
 			/* publish sim operator */
 			publish_received_property("simopid", op->id, &saved_simopid);
-			publish_received_property("simop", op->name, &saved_simop);
+			if (!saved_simop)
+				/* only publish if at+cspn didn't produce any result */
+				publish_received_property("simop", op->name, &saved_simop);
 		}
 		if (saved_opid && !saved_op && op && !strcmp(saved_opid, op->id))
 			/* publish operator name */
@@ -498,7 +504,9 @@ static void at_recvd_response(int argc, char *argv[])
 		op = imsi_to_operator(saved_imsi);
 		if (op) {
 			publish_received_property("simop", op->name, &saved_simop);
-			publish_received_property("simopid", op->id, &saved_simopid);
+			if (!saved_simopid)
+				/* only publish if at+cspn didn't produce any result */
+				publish_received_property("simopid", op->id, &saved_simopid);
 		}
 
 	} else if (!strcasecmp(argv[0], "at+copn")) {
