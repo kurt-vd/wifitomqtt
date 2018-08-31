@@ -157,6 +157,9 @@ static char *saved_simop;
 static char *saved_simopid;
 static int my_copn = 0;
 static int scan_ok;
+static char *saved_brand;
+static char *saved_model;
+static char *saved_rev;
 
 /* command queue */
 struct str {
@@ -468,6 +471,13 @@ issue_at_copn:
 			/* publish operator name */
 			publish_received_property("op", op->name, &saved_op);
 
+	} else if (!strncasecmp(str, "+cgmi: ", 7)) {
+		publish_received_property("brand", strip_quotes(strtok(str+7, ",")), &saved_brand);
+	} else if (!strncasecmp(str, "+cgmm: ", 7)) {
+		publish_received_property("model", strip_quotes(strtok(str+7, ",")), &saved_model);
+	} else if (!strncasecmp(str, "+cgmr: ", 7)) {
+		publish_received_property("rev", strip_quotes(strtok(str+7, ",")), &saved_rev);
+
 	}
 }
 
@@ -509,6 +519,18 @@ static void at_recvd_response(int argc, char *argv[])
 		if (!scan_ok)
 			mypublish("ops", "", 0);
 
+	} else if (!strcasecmp(argv[0], "at+cgmi")) {
+		if (argc > 2)
+			/* argv[1] is value */
+			publish_received_property("brand", strip_quotes(argv[1]), &saved_brand);
+	} else if (!strcasecmp(argv[0], "at+cgmm")) {
+		if (argc > 2)
+			/* argv[1] is value */
+			publish_received_property("model", strip_quotes(argv[1]), &saved_model);
+	} else if (!strcasecmp(argv[0], "at+cgmr")) {
+		if (argc > 2)
+			/* argv[1] is value */
+			publish_received_property("rev", strip_quotes(argv[1]), &saved_rev);
 	}
 }
 
@@ -959,6 +981,11 @@ int main(int argc, char *argv[])
 	else
 		at_write("at+cops?");
 
+	/* device info */
+	at_write("at+cgmi");
+	at_write("at+cgmm");
+	at_write("at+cgmr");
+
 	/* clear potentially retained values in the broker */
 	mypublish("rssi", NULL, 1);
 	mypublish("ber", NULL, 1);
@@ -970,6 +997,9 @@ int main(int argc, char *argv[])
 	mypublish("iccid", NULL, 1);
 	mypublish("simop", NULL, 1);
 	mypublish("simopid", NULL, 1);
+	mypublish("brand", NULL, 1);
+	mypublish("model", NULL, 1);
+	mypublish("rev", NULL, 1);
 	/* make sure to remove any retained scan results, set retained */
 	mypublish("ops", "", 1);
 
@@ -1048,6 +1078,12 @@ done:
 		mypublish("simop", NULL, 1);
 	if (saved_simopid)
 		mypublish("simopid", NULL, 1);
+	if (saved_brand)
+		mypublish("brand", NULL, 1);
+	if (saved_model)
+		mypublish("model", NULL, 1);
+	if (saved_rev)
+		mypublish("rev", NULL, 1);
 	mypublish("ops", "", 0);
 
 	/* terminate */
