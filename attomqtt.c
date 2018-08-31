@@ -256,6 +256,8 @@ static struct operator *imsi_to_operator(const char *imsi)
 {
 	struct operator *op;
 
+	if (!imsi)
+		return NULL;
 	for (op = operators; op; op = op->next) {
 		if (!strncmp(imsi, op->id, op->idlen))
 			return op;
