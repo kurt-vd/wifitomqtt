@@ -144,6 +144,7 @@ static const char *atdev;
 static int atsock;
 static int ignore_responses;
 static int options;
+static int changed_options;
 static double csq_delay = 10;
 static double cnti_delay = 10;
 static double creg_delay = 10;
@@ -872,6 +873,7 @@ int main(int argc, char *argv[])
 				options &= ~opt;
 			else
 				options |= opt;
+			changed_options |= opt;
 			switch (opt) {
 			case O_CSQ:
 				if (optarg)
