@@ -489,6 +489,15 @@ static void at_recvd_response(int argc, char *argv[])
 		/* stop blocking copn info */
 		if (--my_copn < 0)
 			my_copn = 0;
+		if (saved_imsi && !saved_simopid) {
+			/* operator not found in list :-(,
+			 * take 5 characters from IMSI
+			 */
+			char simopid[8] = {};
+
+			strncpy(simopid, saved_imsi, 5);
+			publish_received_property("simopid", simopid, &saved_simopid);
+		}
 	}
 }
 
