@@ -67,6 +67,9 @@ static const char help_msg[] =
 	"	cnti[=DELAY]	Enable periodic technology monitor (AT*CNTI)\n"
 	"			AT*CNTI=0 is done once each DELAY seconds (default 10)\n"
 	"	cops[=DELAY]	Enable periodic operator monitoring\n"
+	"	simcom		Enable hack that waits for 'SMS DONE' EONS report after\n"
+	"			unsolicited '+SIM: READY', since simcom modems throw those EONS report\n"
+	"			in between regular output\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
@@ -101,6 +104,8 @@ static char *const subopttable[] = {
 #define O_AUTOCSQ	(1 << 3)
 	"creg",
 #define O_CREG		(1 << 4)
+	"simcom",
+#define O_SIMCOM	(1 << 5)
 	NULL,
 };
 
@@ -313,9 +318,20 @@ static void at_recvd_info(char *str)
 			/* SIM card become ready */
 			at_write("at+ccid");
 			at_write("at+cimi");
-			if (at_ifnotqueued("at+copn"))
-				++my_copn;
+			if ((options & O_SIMCOM) &&
+					(!strq || strcasecmp(strq->a, "at+cpin?")))
+				/* for simcom modem, don't issue at+copn
+				 * when +cpin arrives as URC (not in response of at+cpin?
+				 */
+				return;
+issue_at_copn:
+			at_write("at+copn");
+			++my_copn;
 		}
+	} else if (!strcasecmp(str, "SMS DONE")) {
+		/* resume at+copn */
+		goto issue_at_copn;
+
 	} else if (!strcasecmp(str, "+simcard: not available")) {
 		/* SIM card lost */
 		publish_received_property("iccid", "", &saved_iccid);
@@ -522,7 +538,8 @@ static void at_recvd(char *line)
 		if (!*str)
 			/* empty str */
 			continue;
-		if (strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) {
+		if ((strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) ||
+			((options & O_SIMCOM) && !strcmp(str+strlen(str)-5, " DONE"))) {
 			/* treat different */
 			if (strncasecmp(str, "+copn: ", 7) || !my_copn)
 				mypublish("raw/at", str, 0);
