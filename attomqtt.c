@@ -557,6 +557,7 @@ static void at_recvd(char *line)
 			/* empty str */
 			continue;
 		if ((strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) ||
+			!strcasecmp(str, "NO CARRIER") ||
 			((options & O_SIMCOM) && !strcmp(str+strlen(str)-5, " DONE"))) {
 			/* treat different */
 			if (strncasecmp(str, "+copn: ", 7) || !my_copn)
@@ -567,7 +568,6 @@ static void at_recvd(char *line)
 		/* collect response */
 		argv[argc++] = str;
 		if (!strcmp(str, "OK") ||
-				!strcmp(str, "NO CARRIER") ||
 				!strncmp(str, "+CME ERROR", 10) ||
 				!strcmp(str, "ABORT") ||
 				!strcmp(str, "ERROR")) {
