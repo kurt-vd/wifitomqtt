@@ -384,7 +384,8 @@ static void hide_ap_mqtt(const char *bssid)
 }
 
 /* aggregated state */
-static const char *wifi_state;
+static const char *req_wifi_state;
+static const char *pub_wifi_state;
 static int is_mode_off(void)
 {
 	struct network *net;
@@ -401,21 +402,21 @@ static int is_mode_off(void)
 }
 static void set_wifi_state(const char *str)
 {
+	req_wifi_state = str;
 	if (is_mode_off())
 		/* publish mode 'off' if all is disabled */
 		str = "off";
 
-	if (!strcmp(str, wifi_state ?: ""))
+	if (!strcmp(str, pub_wifi_state ?: ""))
 		return;
-	mylog(LOG_INFO, "state %s => %s", wifi_state ?: "", str);
-	wifi_state = str;
-
-	publish_value(wifi_state, "net/%s/wifistate", iface);
+	mylog(LOG_INFO, "state %s => %s", pub_wifi_state ?: "", str);
+	publish_value(str, "net/%s/wifistate", iface);
+	pub_wifi_state = str;
 }
 static inline void nets_enabled_changed(void)
 {
 	/* repeat wifi state, maybe some networks were enabled/disabled */
-	set_wifi_state(wifi_state);
+	set_wifi_state(req_wifi_state);
 }
 
 
@@ -837,7 +838,7 @@ static void wpa_recvd_pkt(char *line)
 				wpastate = val;
 		}
 
-		if (!wifi_state) {
+		if (!pub_wifi_state) {
 			/* we just started, and this is the first iteration.
 			 * Fix self_ap and wifi_state
 			 */
