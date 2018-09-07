@@ -823,6 +823,8 @@ static void wpa_recvd_pkt(char *line)
 			} else if (!strcmp(wpastate ?: "", "COMPLETED") && !strcmp(mode ?: "", "station")) {
 				set_wifi_state("station");
 				publish_value("", "net/%s/stations", iface);
+			} else {
+				set_wifi_state("none");
 			}
 		}
 
