@@ -397,7 +397,6 @@ static int is_mode_off(void)
 		if (net->flags & BF_DISABLED)
 			++ndis;
 	}
-mylog(LOG_WARNING, "is_mode_off %i/%i", ndis, nnet);
 	return nnet && ndis >= nnet;
 }
 static void set_wifi_state(const char *str)
