@@ -980,6 +980,16 @@ static void wpa_recvd_pkt(char *line)
 		nets_enabled_changed();
 
 	} else if (!mystrncmp("SELECT_NETWORK ", head->a)) {
+		int idx = strtoul(head->a + 15, NULL, 0);
+		struct network *net;
+
+		for (net = networks; net < networks+nnetworks; ++net) {
+			if (net->id == idx)
+				net->flags &= ~BF_DISABLED;
+			else
+				net->flags |= BF_DISABLED;
+			network_changed(net, 0);
+		}
 		wpa_save_config();
 		nets_enabled_changed();
 
