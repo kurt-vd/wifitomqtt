@@ -1,0 +1,70 @@
+# wifitomqtt
+
+**wifitomqtt** is a bridge to control & monitor wpa_supplicant
+via MQTT
+
+**attomqtt** is a bridge to control & monitor a mobile modem's AT command port
+via MQTT
+
+**ifaddrtomqtt** monitors network interface ipv4 & ipv6 addresses
+and publishes them to MQTT.
+
+## MQTT topic layouts
+### wifitomqtt
+
+The current wpa_supplicant's state is reflected in a series of retained topics.
+
+* **net/<IFACE>/wifistate** The current state, *none*, *station* or *AP*.
+* **net/<IFACE>/bssid** The current accesspoint's BSS that the wifi is connected to
+* **net/<IFACE>/ssid** The current accesspoint's SSID that the wifi is connected to
+* **net/<IFACE>/freq** The current channel frequency
+* **net/<IFACE>/level** The received signal strength in dBm
+
+When wpa_supplicant operates an accesspoint itself (**mode=2**), then
+these topics are published too.
+
+* **net/<IFACE>/lastAP** The last known local accesspoint network name.
+* **net/<IFACE>/stations** The number of clients connected to the local accesspoint
+
+The scan_results of wpa_supplicant are published retained in
+
+* **net/<IFACE>/bss/<BSSID>/freq** The BSS frequency
+* **net/<IFACE>/bss/<BSSID>/level** The BSS received signal strength
+* **net/<IFACE>/bss/<BSSID>/ssid** The BSS network name
+* **net/<IFACE>/bss/<BSSID>/flag** The BSS flags. This is a word containing single letters
+  for each flag, or a **-** for absent flags
+  * **w** This BSS is WPA encrypted
+  * **W** This BSS is WEP encrypted
+  * **e** This BSS authorizes with EAP
+  * **k** This BSS is known already in the config
+  * **d** This BSS is disabled in the config
+  * **a** This BSS is a local accesspoint. This should never appear in scanned BSS's
+
+wifitomqtt subscribes/reacts to these topics:
+
+* **net/<IFACE>/ssid/set select network with SSID from payload, or **none** or **all**
+* **net/<IFACE>/ssid/enable enable network with SSID from payload
+* **net/<IFACE>/ssid/disable disable network
+* **net/<IFACE>/ssid/remove remove network
+* **net/<IFACE>/ssid/ap make network an accesspoint (mode=2, bgscan="")
+* **net/<IFACE>/ssid/psk Set the PSK of a network, with payload consisting of 1 line SSID, and 2nd line the PSK
+* **net/<IFACE>/ssid/config/<OPTION> set any wpa_supplicant.conf network **<OPTION>**. 1st line of payload is SSID, 2nd line is option value
+* **net/<IFACE>/config/<OPTION> set any wpa_supplicant.conf global **<OPTION>**. Payload is the value
+
+## cross compiling
+
+(Cross-)compiling is performed without using autotools!
+
+Locally modifying the build can be done by creating
+a config.mk file, which allows to tune some variables
+from the Makefile.
+
+The modifications of config.mk are hidden from git,
+they are supposed to be trivial.
+
+Since creating such config.mk file from scratch
+may be hard, some examples are provided.
+You can start with copying any of those to config.mk
+
+config.mk-arm:
+	This cross-compiles on linux (posix) for arm.
