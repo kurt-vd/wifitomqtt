@@ -14,7 +14,7 @@ and publishes them to MQTT.
 
 The current wpa_supplicant's state is reflected in a series of retained topics.
 
-* **net/<IFACE>/wifistate** The current state, *none*, *station* or *AP*.
+* **net/<IFACE>/wifistate** The current state, *off*, *none*, *station* or *AP*.
 * **net/<IFACE>/bssid** The current accesspoint's BSS that the wifi is connected to
 * **net/<IFACE>/ssid** The current accesspoint's SSID that the wifi is connected to
 * **net/<IFACE>/freq** The current channel frequency

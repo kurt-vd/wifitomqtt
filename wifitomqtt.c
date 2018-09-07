@@ -385,8 +385,27 @@ static void hide_ap_mqtt(const char *bssid)
 
 /* aggregated state */
 static const char *wifi_state;
+static int is_mode_off(void)
+{
+	struct network *net;
+	int j;
+	int nnet = 0, ndis = 0;
+
+	/* find if all networks are disabled. Go off in that case */
+	for (net = networks, j = 0; j < nnetworks; ++net, ++j) {
+		++nnet;
+		if (net->flags & BF_DISABLED)
+			++ndis;
+	}
+mylog(LOG_WARNING, "is_mode_off %i/%i", ndis, nnet);
+	return nnet && ndis >= nnet;
+}
 static void set_wifi_state(const char *str)
 {
+	if (is_mode_off())
+		/* publish mode 'off' if all is disabled */
+		str = "off";
+
 	if (!strcmp(str, wifi_state ?: ""))
 		return;
 	mylog(LOG_INFO, "state %s => %s", wifi_state ?: "", str);
@@ -394,6 +413,12 @@ static void set_wifi_state(const char *str)
 
 	publish_value(wifi_state, "net/%s/wifistate", iface);
 }
+static inline void nets_enabled_changed(void)
+{
+	/* repeat wifi state, maybe some networks were enabled/disabled */
+	set_wifi_state(wifi_state);
+}
+
 
 static int nstations;
 static void set_wifi_stations(int n)
@@ -648,6 +673,7 @@ static void wpa_recvd_pkt(char *line)
 				net->flags |= BF_DISABLED;
 			else
 				net->flags &= ~BF_DISABLED;
+			nets_enabled_changed();
 		}
 		if (flags != net->flags)
 			network_changed(net, 0);
@@ -676,6 +702,7 @@ static void wpa_recvd_pkt(char *line)
 				net->flags |= BF_DISABLED;
 			else
 				net->flags &= ~BF_DISABLED;
+			nets_enabled_changed();
 		}
 		network_changed(net, 0);
 
@@ -893,6 +920,7 @@ static void wpa_recvd_pkt(char *line)
 		else if (!(net->flags & BF_DISABLED))
 			/* enable station-mode networks automatically */
 			wpa_send("ENABLE_NETWORK %i", id);
+		nets_enabled_changed();
 
 	} else if (!mystrncmp("ENABLE_NETWORK all", head->a)) {
 		for (j = 0; j < nnetworks; ++j) {
@@ -902,6 +930,7 @@ static void wpa_recvd_pkt(char *line)
 			}
 		}
 		wpa_save_config();
+		nets_enabled_changed();
 
 	} else if (!mystrncmp("DISABLE_NETWORK all", head->a)) {
 		for (j = 0; j < nnetworks; ++j) {
@@ -911,6 +940,7 @@ static void wpa_recvd_pkt(char *line)
 			}
 		}
 		wpa_save_config();
+		nets_enabled_changed();
 
 	} else if (!mystrncmp("ENABLE_NETWORK ", head->a)) {
 		int idx = strtoul(head->a + 15, NULL, 0);
@@ -920,6 +950,7 @@ static void wpa_recvd_pkt(char *line)
 			net->flags &= ~BF_DISABLED;
 			network_changed(net, 0);
 			wpa_save_config();
+			nets_enabled_changed();
 		}
 
 	} else if (!mystrncmp("DISABLE_NETWORK ", head->a)) {
@@ -930,6 +961,7 @@ static void wpa_recvd_pkt(char *line)
 			net->flags |= BF_DISABLED;
 			network_changed(net, 0);
 			wpa_save_config();
+			nets_enabled_changed();
 		}
 
 	} else if (!mystrncmp("REMOVE_NETWORK ", head->a)) {
@@ -940,13 +972,16 @@ static void wpa_recvd_pkt(char *line)
 			network_changed(net, 1);
 			wpa_save_config();
 			remove_network(net);
+			nets_enabled_changed();
 		}
 
 	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
 		wpa_save_config();
+		nets_enabled_changed();
 
 	} else if (!mystrncmp("SELECT_NETWORK ", head->a)) {
 		wpa_save_config();
+		nets_enabled_changed();
 
 	} else if (!strcmp("PING", head->a)) {
 		/* ignore */
