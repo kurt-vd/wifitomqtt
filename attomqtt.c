@@ -276,6 +276,16 @@ static struct operator *imsi_to_operator(const char *imsi)
 	return NULL;
 }
 
+/* lists */
+static const char *const cregstrs[] = {
+	[0] = "none",
+	[1] = "registered",
+	[2] = "searching",
+	[3] = "denied",
+	[4] = "unknown",
+	[5] = "roaming",
+};
+
 /* AT iface */
 __attribute__((format(printf,1,2)))
 static int at_write(const char *fmt, ...);
@@ -369,28 +379,21 @@ issue_at_copn:
 		publish_received_property("iccid", strip_quotes(str+7), &saved_iccid);
 
 	} else if (!strncasecmp(str, "+creg: ", 7)) {
-		char *chr = strchr(str+7, ',');
-		if (chr)
-			/* reply of at+creg? */
-			str = chr+1;
-		else
-			/* unsolicited response code, no ',' */
-			str = str+7;
-		static const char *const cregs[] = {
-			[0] = "none",
-			[1] = "registered",
-			[2] = "searching",
-			[3] = "denied",
-			[4] = "unknown",
-			[5] = "roaming",
-		};
+		char *tok;
+		/* cut leading +creg: */
+		strtok(str, " ");
 
-		int idx = strtoul(str, NULL, 10);
+		/* find value a from a or n,a */
+		tok = strtok(NULL, ",");
+		/* try 2nd value, or take 1st */
+		tok = strtok(NULL, ",") ?: tok;
 
-		if (idx >= sizeof(cregs)/sizeof(cregs[0]))
+		int idx = strtoul(tok, NULL, 10);
+
+		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
 			idx = 4;
-		if (cregs[idx] != saved_reg) {
-			saved_reg = cregs[idx];
+		if (cregstrs[idx] != saved_reg) {
+			saved_reg = cregstrs[idx];
 			mypublish("reg", saved_reg, 1);
 			if (idx == 1 || idx == 5)
 				at_write("at+cops?");
