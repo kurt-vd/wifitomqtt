@@ -400,7 +400,7 @@ issue_at_copn:
 		if (cregstrs[idx] != saved_reg) {
 			saved_reg = cregstrs[idx];
 			mypublish("reg", saved_reg, 1);
-			if (idx == 1 || idx == 5)
+			if (idx == 1 || idx == 3 || idx == 5)
 				at_write("at+cops?");
 			else {
 				publish_received_property("op", "", &saved_op);
