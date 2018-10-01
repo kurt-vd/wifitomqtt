@@ -423,7 +423,7 @@ issue_at_copn:
 			idx = 4;
 		if (cregstrs[idx] != saved_reg) {
 			saved_reg = cregstrs[idx];
-			mypublish("reg", saved_reg, 1);
+			mypublish("greg", saved_reg, 1);
 		}
 	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
