@@ -162,6 +162,7 @@ static const char *saved_reg;
 static const char *saved_greg;
 static char *saved_iccid;
 static char *saved_imsi;
+static char *saved_number;
 static char *saved_simop;
 static char *saved_simopid;
 static int my_copn = 0;
@@ -352,6 +353,7 @@ static void at_recvd_info(char *str)
 			at_write("at+cspn?");
 			at_write("at+ccid");
 			at_write("at+cimi");
+			at_write("at+cnum");
 			if ((options & O_SIMCOM) &&
 					(!strq || strcasecmp(strq->a, "at+cpin?")))
 				/* for simcom modem, don't issue at+copn
@@ -368,6 +370,7 @@ issue_at_copn:
 
 	} else if (!strcasecmp(str, "+simcard: not available")) {
 		/* SIM card lost */
+		publish_received_property("number", "", &saved_number);
 		publish_received_property("iccid", "", &saved_iccid);
 		publish_received_property("imsi", "", &saved_imsi);
 		publish_received_property("op", "", &saved_simop);
@@ -382,6 +385,11 @@ issue_at_copn:
 
 	} else if (!strncasecmp(str, "+ccid: ", 7)) {
 		publish_received_property("iccid", strip_quotes(str+7), &saved_iccid);
+
+	} else if (!strncasecmp(str, "+cnum: ", 7)) {
+		/* parse 'label,number,type' */
+		strtok(str+7, ",");
+		publish_received_property("number", strip_quotes(strtok(NULL, ",")), &saved_number);
 
 	} else if (!strncasecmp(str, "+creg: ", 7)) {
 		/* find value a from a or n,a */
@@ -1052,6 +1060,7 @@ int main(int argc, char *argv[])
 	mypublish("reg", NULL, 1);
 	mypublish("imsi", NULL, 1);
 	mypublish("iccid", NULL, 1);
+	mypublish("number", NULL, 1);
 	mypublish("simop", NULL, 1);
 	mypublish("simopid", NULL, 1);
 	mypublish("brand", NULL, 1);
@@ -1133,6 +1142,8 @@ done:
 		mypublish("imsi", NULL, 1);
 	if (saved_iccid)
 		mypublish("iccid", NULL, 1);
+	if (saved_number)
+		mypublish("number", NULL, 1);
 	if (saved_simop)
 		mypublish("simop", NULL, 1);
 	if (saved_simopid)
