@@ -64,6 +64,7 @@ static const char help_msg[] =
 	"			AT+CSQ is done once each DELAY seconds (default 10)\n"
 	"	autocsq		Enable automatic signal reporting (AT+AUTOCSQ=1,1)\n"
 	"	creg[=DELAY]	Enable periodic Registration monitoring\n"
+	"	cgreg[=DELAY]	Enable periodic GPRS Registration monitoring\n"
 	"	cnti[=DELAY]	Enable periodic technology monitor (AT*CNTI)\n"
 	"			AT*CNTI=0 is done once each DELAY seconds (default 10)\n"
 	"	cops[=DELAY]	Enable periodic operator monitoring\n"
@@ -105,10 +106,12 @@ static char *const subopttable[] = {
 #define O_AUTOCSQ	(1 << 3)
 	"creg",
 #define O_CREG		(1 << 4)
+	"cgreg",
+#define O_CGREG		(1 << 5)
 	"simcom",
-#define O_SIMCOM	(1 << 5)
+#define O_SIMCOM	(1 << 6)
 	"detachedscan",
-#define O_DETACHEDSCAN	(1 << 6)
+#define O_DETACHEDSCAN	(1 << 7)
 	NULL,
 };
 
@@ -148,6 +151,7 @@ static int changed_options;
 static double csq_delay = 10;
 static double cnti_delay = 10;
 static double creg_delay = 10;
+static double cgreg_delay = 10;
 static double cops_delay = 60;
 /* raw rssi & ber values, 99 equals 'no value' */
 static int saved_rssi = 99, saved_ber = 99;
@@ -155,6 +159,7 @@ static char *saved_op;
 static char *saved_opid;
 static char *saved_nt0;
 static const char *saved_reg;
+static const char *saved_greg;
 static char *saved_iccid;
 static char *saved_imsi;
 static char *saved_simop;
@@ -401,6 +406,24 @@ issue_at_copn:
 				publish_received_property("op", "", &saved_op);
 				publish_received_property("opid", "", &saved_op);
 			}
+		}
+	} else if (!strncasecmp(str, "+cgreg: ", 8)) {
+		char *tok;
+		/* cut leading +cgreg: */
+		strtok(str, " ");
+
+		/* find value a from a or n,a */
+		tok = strtok(NULL, ",");
+		/* try 2nd value, or take 1st */
+		tok = strtok(NULL, ",") ?: tok;
+
+		int idx = strtoul(tok, NULL, 10);
+
+		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
+			idx = 4;
+		if (cregstrs[idx] != saved_reg) {
+			saved_reg = cregstrs[idx];
+			mypublish("reg", saved_reg, 1);
 		}
 	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
@@ -737,6 +760,13 @@ static void at_creg(void *dat)
 	libt_add_timeout(creg_delay, at_creg, dat);
 }
 
+static void at_cgreg(void *dat)
+{
+	at_ifnotqueued("at+cgreg?");
+	/* repeat */
+	libt_add_timeout(cgreg_delay, at_cgreg, dat);
+}
+
 static void at_csq(void *dat)
 {
 	at_ifnotqueued("at+csq");
@@ -898,6 +928,10 @@ int main(int argc, char *argv[])
 				if (optarg)
 					creg_delay = strtod(optarg, NULL);
 				break;
+			case O_CGREG:
+				if (optarg)
+					cgreg_delay = strtod(optarg, NULL);
+				break;
 			case O_COPS:
 				if (optarg)
 					cops_delay = strtod(optarg, NULL);
@@ -993,6 +1027,10 @@ int main(int argc, char *argv[])
 		at_creg(NULL);
 	else
 		at_write("at+creg?");
+	if (options & O_CGREG)
+		at_cgreg(NULL);
+	else
+		at_write("at+cgreg?");
 	if (options & O_CSQ)
 		at_csq(NULL);
 	else if (options & O_AUTOCSQ) {
@@ -1098,6 +1136,8 @@ done:
 		mypublish("nt", NULL, 1);
 	if (saved_reg)
 		mypublish("reg", NULL, 1);
+	if (saved_greg)
+		mypublish("greg", NULL, 1);
 	if (saved_imsi)
 		mypublish("imsi", NULL, 1);
 	if (saved_iccid)
