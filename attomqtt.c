@@ -384,16 +384,12 @@ issue_at_copn:
 		publish_received_property("iccid", strip_quotes(str+7), &saved_iccid);
 
 	} else if (!strncasecmp(str, "+creg: ", 7)) {
-		char *tok;
-		/* cut leading +creg: */
-		strtok(str, " ");
-
 		/* find value a from a or n,a */
-		tok = strtok(NULL, ",");
+		str = strtok(str+7, ",");
 		/* try 2nd value, or take 1st */
-		tok = strtok(NULL, ",") ?: tok;
+		str = strtok(NULL, ",") ?: str;
 
-		int idx = strtoul(tok, NULL, 10);
+		int idx = strtoul(str, NULL, 10);
 
 		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
 			idx = 4;
@@ -408,16 +404,12 @@ issue_at_copn:
 			}
 		}
 	} else if (!strncasecmp(str, "+cgreg: ", 8)) {
-		char *tok;
-		/* cut leading +cgreg: */
-		strtok(str, " ");
-
 		/* find value a from a or n,a */
-		tok = strtok(NULL, ",");
+		str = strtok(str+8, ",");
 		/* try 2nd value, or take 1st */
-		tok = strtok(NULL, ",") ?: tok;
+		str = strtok(NULL, ",") ?: str;
 
-		int idx = strtoul(tok, NULL, 10);
+		int idx = strtoul(str, NULL, 10);
 
 		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
 			idx = 4;
