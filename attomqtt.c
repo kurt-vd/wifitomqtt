@@ -803,10 +803,9 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		at_write("%s", (char *)msg->payload);
 
 	else if (!strcmp(msg->topic+mqtt_prefix_len, "ops/scan")) {
-		if (options & O_DETACHEDSCAN) {
+		if (options & O_DETACHEDSCAN)
 			at_write("%s", "at+cops=2");
-			at_write("at+cops=?");
-		}
+		at_write("at+cops=?");
 	}
 }
 
