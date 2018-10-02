@@ -65,8 +65,6 @@ static const char help_msg[] =
 	"	autocsq		Enable automatic signal reporting (AT+AUTOCSQ=1,1)\n"
 	"	creg[=DELAY]	Enable periodic Registration monitoring\n"
 	"	cgreg[=DELAY]	Enable periodic GPRS Registration monitoring\n"
-	"	cnti[=DELAY]	Enable periodic technology monitor (AT*CNTI)\n"
-	"			AT*CNTI=0 is done once each DELAY seconds (default 10)\n"
 	"	cops[=DELAY]	Enable periodic operator monitoring\n"
 	"	simcom		Enable hack that waits for 'SMS DONE' EONS report after\n"
 	"			unsolicited '+SIM: READY', since simcom modems throw those EONS report\n"
@@ -98,6 +96,9 @@ static const char optstring[] = "Vv?h:p:o:";
 static char *const subopttable[] = {
 	"csq",
 #define O_CSQ		(1 << 0)
+	/* keep cnti for backward compatibility,
+	 * as it is part of the external 'API' of the program
+	 */
 	"cnti",
 #define O_CNTI		(1 << 1)
 	"cops",
@@ -149,7 +150,6 @@ static int ignore_responses;
 static int options;
 static int changed_options;
 static double csq_delay = 10;
-static double cnti_delay = 10;
 static double creg_delay = 10;
 static double cgreg_delay = 10;
 static double cops_delay = 60;
@@ -183,7 +183,6 @@ static int pri_nt;
 #define PRI_CGREG	4
 #define PRI_CREG	3
 #define PRI_COPS	2
-#define PRI_CNTI	1
 
 /* command queue */
 struct str {
@@ -537,8 +536,6 @@ issue_at_copn:
 			saved_ber = ber;
 		}
 
-	} else if (!strncasecmp(str, "*cnti: 0,", 9)) {
-		publish_received_property_pri("nt", str+9, &saved_nt, PRI_CNTI, &pri_nt);
 	} else if (!strncasecmp(str, "+cops: ", 7)) {
 		if (str[7] == '(') {
 			/* at+cops=? : return list of operators */
@@ -857,13 +854,6 @@ static void at_csq(void *dat)
 	libt_add_timeout(csq_delay, at_csq, dat);
 }
 
-static void at_cnti(void *dat)
-{
-	at_ifnotqueued("at*cnti=0");
-	/* repeat */
-	libt_add_timeout(cnti_delay, at_cnti, dat);
-}
-
 static void at_cops(void *dat)
 {
 	at_ifnotqueued("at+cops?");
@@ -1002,10 +992,6 @@ int main(int argc, char *argv[])
 				if (optarg)
 					csq_delay = strtod(optarg, NULL);
 				break;
-			case O_CNTI:
-				if (optarg)
-					cnti_delay = strtod(optarg, NULL);
-				break;
 			case O_CREG:
 				if (optarg)
 					creg_delay = strtod(optarg, NULL);
@@ -1037,6 +1023,8 @@ int main(int argc, char *argv[])
 	}
 
 	setmylog(NAME, 0, LOG_LOCAL2, loglevel);
+	if (changed_options & O_CNTI)
+		mylog(LOG_WARNING, "program option '-o cnti' became obsoleted");
 
 	/* prepare program */
 	atdev = argv[optind];
@@ -1120,8 +1108,6 @@ int main(int argc, char *argv[])
 		at_write("at+csqdelta=1");
 	} else
 		at_write("at+csq");
-	if (options & O_CNTI)
-		at_cnti(NULL);
 	/* set alphanumeric operator names */
 	at_write("at+cops=3,2");
 	if (options & O_COPS)
