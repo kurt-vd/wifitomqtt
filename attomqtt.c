@@ -157,9 +157,11 @@ static double cops_delay = 60;
 static int saved_rssi = 99, saved_ber = 99;
 static char *saved_op;
 static char *saved_opid;
-static char *saved_nt0;
-static const char *saved_reg;
-static const char *saved_greg;
+static char *saved_nt;
+static char *saved_lac;
+static char *saved_cellid;
+static char *saved_reg;
+static char *saved_greg;
 static char *saved_iccid;
 static char *saved_imsi;
 static char *saved_number;
@@ -173,6 +175,15 @@ static char *saved_rev;
 
 static void changed_brand(void);
 static void changed_model(void);
+
+static int pri_lac;
+static int pri_cellid;
+static int pri_nt;
+/* list for potential sources, higher values have precedence */
+#define PRI_CGREG	4
+#define PRI_CREG	3
+#define PRI_COPS	2
+#define PRI_CNTI	1
 
 /* command queue */
 struct str {
@@ -290,7 +301,45 @@ static const char *const cregstrs[] = {
 	[3] = "denied",
 	[4] = "unknown",
 	[5] = "roaming",
+	[6] = "sms only",
+	[7] = "roaming sms only",
+	[8] = "emergency",
 };
+
+static const char *cregstr(int id)
+{
+	if (id >= 0 && id < sizeof(cregstrs)/sizeof(cregstrs[0]))
+		return cregstrs[id];
+	else
+		return cregstrs[4];
+}
+
+static const char *const ntstrs[] = {
+	[0] = "gprs", //"gsm",
+	[1] = "gprs-c", //"gsm compact",
+	[2] = "3g", //"utran",
+	[3] = "edge", //"gsm egprs",
+	[4] = "3g", //"utran+hsdpa",
+	[5] = "3g", //"utran+hsupa",
+	[6] = "3g", //"utran+hsdpa+hsupa",
+	[7] = "4g", //"eutran",
+	[8] = "gprs", //ec-gsm-iot",
+	[9] = "4g", //"eutran nb-s1",
+	[10] = "4g", //"eutra",
+	[11] = "5g", //"5gcn",
+	[12] = "eps",
+	[13] = "5g", //"ngran",
+	[14] = "5g", //"eutranr",
+};
+static const char *ntstr(int id)
+{
+	if (id == 8 && (options & O_SIMCOM))
+		return "cdma";
+	if (id >= 0 && id < sizeof(ntstrs)/sizeof(ntstrs[0]))
+		return ntstrs[id];
+	else
+		return NULL;
+}
 
 /* AT iface */
 __attribute__((format(printf,1,2)))
@@ -316,6 +365,7 @@ static void at_timeout(void *dat)
 	at_next_cmd(NULL);
 }
 
+static int property_changed;
 static void publish_received_property(const char *mqttname, const char *str, char **pcache)
 {
 	if (strcmp(*pcache ?: "", str ?: "")) {
@@ -327,7 +377,9 @@ static void publish_received_property(const char *mqttname, const char *str, cha
 			changed_brand();
 		else if (pcache == &saved_model)
 			changed_model();
-	}
+		property_changed = 1;
+	} else
+		property_changed = 0;
 }
 static char *strip_quotes(char *str)
 {
@@ -341,6 +393,38 @@ static char *strip_quotes(char *str)
 		}
 	}
 	return str;
+}
+
+static const char *htod(const char *hex)
+{
+	static char buf[64];
+	char *endp;
+	unsigned long val;
+
+	if (!hex)
+		return NULL;
+	val = strtoul(hex, &endp, 16);
+	if (endp == hex)
+		return NULL;
+	sprintf(buf, "%lu", val);
+	return buf;
+}
+
+static void publish_received_property_pri(const char *mqttname, const char *str, char **pcache,
+		int prio, int *pprio)
+{
+	if (!str || !*str) {
+		if (*pprio == prio) {
+			*pprio = 0;
+			publish_received_property(mqttname, str, pcache);
+		}
+		return;
+	}
+
+	if (prio >= *pprio) {
+		publish_received_property(mqttname, str, pcache);
+		*pprio = prio;
+	}
 }
 
 static void at_recvd_info(char *str)
@@ -397,13 +481,9 @@ issue_at_copn:
 		/* try 2nd value, or take 1st */
 		str = strtok(NULL, ",") ?: str;
 
-		int idx = strtoul(str, NULL, 10);
-
-		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
-			idx = 4;
-		if (cregstrs[idx] != saved_reg) {
-			saved_reg = cregstrs[idx];
-			mypublish("reg", saved_reg, 1);
+		int idx = strtoul(str ?: "-1", NULL, 10);
+		publish_received_property("reg", cregstr(idx), &saved_greg);
+		if (property_changed) {
 			if (idx == 1 || idx == 3 || idx == 5)
 				at_write("at+cops?");
 			else {
@@ -411,20 +491,23 @@ issue_at_copn:
 				publish_received_property("opid", "", &saved_op);
 			}
 		}
+		publish_received_property_pri("lac", htod(strtok(NULL, ",")), &saved_lac, PRI_CREG, &pri_lac);
+		publish_received_property_pri("cellid", htod(strtok(NULL, ",")), &saved_cellid, PRI_CREG, &pri_cellid);
+		/* convert next token (or '-1') to long, and lookup ntstr from it */
+		publish_received_property_pri("nt", ntstr(strtol(strtok(NULL, ",") ?: "-1", NULL, 0)), &saved_nt, PRI_CREG, &pri_nt);
+
 	} else if (!strncasecmp(str, "+cgreg: ", 8)) {
 		/* find value a from a or n,a */
 		str = strtok(str+8, ",");
 		/* try 2nd value, or take 1st */
 		str = strtok(NULL, ",") ?: str;
 
-		int idx = strtoul(str, NULL, 10);
+		int idx = strtoul(str ?: "-1", NULL, 10);
+		publish_received_property("greg", cregstr(idx), &saved_greg);
+		publish_received_property_pri("lac", htod(strtok(NULL, ",")), &saved_lac, PRI_CGREG, &pri_lac);
+		publish_received_property_pri("cellid", htod(strtok(NULL, ",")), &saved_cellid, PRI_CGREG, &pri_cellid);
+		publish_received_property_pri("nt", ntstr(strtoul(strtok(NULL, ",") ?: "-1", NULL, 0)), &saved_nt, PRI_CREG, &pri_nt);
 
-		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
-			idx = 4;
-		if (cregstrs[idx] != saved_greg) {
-			saved_reg = cregstrs[idx];
-			mypublish("greg", saved_greg, 1);
-		}
 	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
 		char *endp;
@@ -455,8 +538,7 @@ issue_at_copn:
 		}
 
 	} else if (!strncasecmp(str, "*cnti: 0,", 9)) {
-		publish_received_property("nt", str+9, &saved_nt0);
-
+		publish_received_property_pri("nt", str+9, &saved_nt, PRI_CNTI, &pri_nt);
 	} else if (!strncasecmp(str, "+cops: ", 7)) {
 		if (str[7] == '(') {
 			/* at+cops=? : return list of operators */
@@ -496,6 +578,7 @@ issue_at_copn:
 			struct operator *op = opid_to_operator(saved_opid);
 			if (op)
 				publish_received_property("op", op->name, &saved_op);
+			publish_received_property_pri("nt", ntstr(strtoul(strtok(NULL, ",") ?: "-1", NULL, 0)), &saved_nt, PRI_COPS, &pri_nt);
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
 		char *num, *name;
@@ -1059,6 +1142,8 @@ int main(int argc, char *argv[])
 	mypublish("nt", NULL, 1);
 	mypublish("reg", NULL, 1);
 	mypublish("greg", NULL, 1);
+	mypublish("cellid", NULL, 1);
+	mypublish("lac", NULL, 1);
 	mypublish("imsi", NULL, 1);
 	mypublish("iccid", NULL, 1);
 	mypublish("number", NULL, 1);
@@ -1133,12 +1218,16 @@ done:
 		mypublish("op", NULL, 1);
 	if (saved_opid)
 		mypublish("opid", NULL, 1);
-	if (saved_nt0)
+	if (saved_nt)
 		mypublish("nt", NULL, 1);
 	if (saved_reg)
 		mypublish("reg", NULL, 1);
 	if (saved_greg)
 		mypublish("greg", NULL, 1);
+	if (saved_lac)
+		mypublish("lac", NULL, 1);
+	if (saved_cellid)
+		mypublish("cellid", NULL, 1);
 	if (saved_imsi)
 		mypublish("imsi", NULL, 1);
 	if (saved_iccid)
