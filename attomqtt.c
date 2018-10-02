@@ -421,9 +421,9 @@ issue_at_copn:
 
 		if (idx >= sizeof(cregstrs)/sizeof(cregstrs[0]))
 			idx = 4;
-		if (cregstrs[idx] != saved_reg) {
+		if (cregstrs[idx] != saved_greg) {
 			saved_reg = cregstrs[idx];
-			mypublish("greg", saved_reg, 1);
+			mypublish("greg", saved_greg, 1);
 		}
 	} else if (!strncasecmp(str, "+csq: ", 6)) {
 		int rssi, ber;
@@ -1058,6 +1058,7 @@ int main(int argc, char *argv[])
 	mypublish("opid", NULL, 1);
 	mypublish("nt", NULL, 1);
 	mypublish("reg", NULL, 1);
+	mypublish("greg", NULL, 1);
 	mypublish("imsi", NULL, 1);
 	mypublish("iccid", NULL, 1);
 	mypublish("number", NULL, 1);
