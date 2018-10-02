@@ -475,10 +475,10 @@ issue_at_copn:
 		publish_received_property("number", strip_quotes(strtok(NULL, ",")), &saved_number);
 
 	} else if (!strncasecmp(str, "+creg: ", 7)) {
-		/* find value a from a or n,a */
 		str = strtok(str+7, ",");
-		/* try 2nd value, or take 1st */
-		str = strtok(NULL, ",") ?: str;
+		if (strq && !strcasecmp(strq->a, "at+creg?"))
+			/* upon request, the URC stat is prepended first, skip it ... */
+			str = strtok(NULL, ",");
 
 		int idx = strtoul(str ?: "-1", NULL, 10);
 		publish_received_property("reg", cregstr(idx), &saved_greg);
@@ -496,10 +496,10 @@ issue_at_copn:
 		publish_received_property_pri("nt", ntstr(strtol(strtok(NULL, ",") ?: "-1", NULL, 0)), &saved_nt, PRI_CREG, &pri_nt);
 
 	} else if (!strncasecmp(str, "+cgreg: ", 8)) {
-		/* find value a from a or n,a */
-		str = strtok(str+8, ",");
-		/* try 2nd value, or take 1st */
-		str = strtok(NULL, ",") ?: str;
+		str = strtok(str+7, ",");
+		if (strq && !strcasecmp(strq->a, "at+cgreg?"))
+			/* upon request, the URC stat is prepended first, skip it ... */
+			str = strtok(NULL, ",");
 
 		int idx = strtoul(str ?: "-1", NULL, 10);
 		publish_received_property("greg", cregstr(idx), &saved_greg);
