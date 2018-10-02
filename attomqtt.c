@@ -481,7 +481,7 @@ issue_at_copn:
 			str = strtok(NULL, ",");
 
 		int idx = strtoul(str ?: "-1", NULL, 10);
-		publish_received_property("reg", cregstr(idx), &saved_greg);
+		publish_received_property("reg", cregstr(idx), &saved_reg);
 		if (property_changed) {
 			if (idx == 1 || idx == 3 || idx == 5)
 				at_write("at+cops?");
