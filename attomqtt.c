@@ -136,6 +136,7 @@ static int mqtt_prefix_len;
 /* utils */
 static struct mosquitto *mosq;
 static void mypublish(const char *bare_topic, const char *value, int retain);
+static int mypublish_change(const char *bare_topic, const char *value, int retain, char **saved);
 __attribute__((format(printf,1,2)))
 static const char *valuetostr(const char *fmt, ...);
 
@@ -367,21 +368,21 @@ static void at_timeout(void *dat)
 	at_next_cmd(NULL);
 }
 
-static int property_changed;
-static void publish_received_property(const char *mqttname, const char *str, char **pcache)
+#define publish_received_property(x,y,z) mypublish_change((x), (y), 1, (z))
+static int mypublish_change(const char *mqttname, const char *str, int retain, char **pcache)
 {
 	if (strcmp(*pcache ?: "", str ?: "")) {
 		myfree(*pcache);
 		*pcache = (str && *str) ? strdup(str) : NULL;
-		mypublish(mqttname, str, 1);
+		mypublish(mqttname, str, retain);
 
 		if (pcache == &saved_brand)
 			changed_brand();
 		else if (pcache == &saved_model)
 			changed_model();
-		property_changed = 1;
+		return 1;
 	} else
-		property_changed = 0;
+		return 0;
 }
 static char *strip_quotes(char *str)
 {
@@ -484,8 +485,7 @@ issue_at_copn:
 			str = strtok(NULL, ",");
 
 		int idx = strtoul(str ?: "-1", NULL, 10);
-		publish_received_property("reg", cregstr(idx), &saved_reg);
-		if (property_changed) {
+		if (publish_received_property("reg", cregstr(idx), &saved_reg)) {
 			if (idx == 1 || idx == 3 || idx == 5)
 				at_write("at+cops?");
 			else {
