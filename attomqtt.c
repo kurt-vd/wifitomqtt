@@ -66,6 +66,7 @@ static const char help_msg[] =
 	"	creg[=DELAY]	Enable periodic Registration monitoring\n"
 	"	cgreg[=DELAY]	Enable periodic GPRS Registration monitoring\n"
 	"	cops[=DELAY]	Enable periodic operator monitoring\n"
+	"	ceer		Issue AT+CEER on error URC's\n"
 	"	simcom		Enable hack that waits for 'SMS DONE' EONS report after\n"
 	"			unsolicited '+SIM: READY', since simcom modems throw those EONS report\n"
 	"			in between regular output\n"
@@ -113,6 +114,8 @@ static char *const subopttable[] = {
 #define O_SIMCOM	(1 << 6)
 	"detachedscan",
 #define O_DETACHEDSCAN	(1 << 7)
+	"ceer",
+#define O_CEER		(1 << 8)
 	NULL,
 };
 
@@ -147,7 +150,7 @@ static void myfree(void *dat)
 static const char *atdev;
 static int atsock;
 static int ignore_responses;
-static int options;
+static int options = O_CEER;
 static int changed_options;
 static double csq_delay = 10;
 static double creg_delay = 10;
@@ -602,6 +605,8 @@ issue_at_copn:
 	} else if (!strncasecmp(str, "+cgmr: ", 7)) {
 		publish_received_property("rev", strip_quotes(strtok(str+7, ",")), &saved_rev);
 
+	} else if (!strncasecmp(str, "+ceer: ", 7)) {
+		mypublish("warn", str+7, 0);
 	}
 }
 
@@ -704,8 +709,17 @@ static void at_recvd(char *line)
 		if (!*str)
 			/* empty str */
 			continue;
-		if ((strchr("+*", *str) && strncmp(str, "+CME ERROR", 10)) ||
-			!strcasecmp(str, "NO CARRIER") ||
+		else if (!strcasecmp(str, "NO CARRIER")) {
+			mypublish("raw/at", str, 0);
+			if (options & O_CEER)
+				at_ifnotqueued("at+ceer");
+			at_recvd_info(str);
+			continue;
+		} else if (!strncmp(str, "+CME ERROR", 10) || !strcmp(str, "ERROR")) {
+			if (options & O_CEER)
+				at_ifnotqueued("at+ceer");
+			/* leave str as command response */
+		} else if (strchr("+*", *str) ||
 			((options & O_SIMCOM) && !strcmp(str+strlen(str)-5, " DONE"))) {
 			/* treat different */
 			if (strncasecmp(str, "+copn: ", 7) || !my_copn)
