@@ -176,6 +176,7 @@ static int scan_ok;
 static char *saved_brand;
 static char *saved_model;
 static char *saved_rev;
+static char *saved_fail;
 
 static void changed_brand(void);
 static void changed_model(void);
@@ -363,7 +364,7 @@ static void at_next_cmd(void *dat)
 
 static void at_timeout(void *dat)
 {
-	mypublish("fail", valuetostr("%s: timeout", strq->a), 0);
+	mypublish_change("fail", valuetostr("%s: timeout", strq->a), 0, &saved_fail);
 	mylog(LOG_WARNING, "%s: timeout", strq->a);
 	at_next_cmd(NULL);
 }
@@ -617,7 +618,7 @@ static void at_recvd_response(int argc, char *argv[])
 		return;
 	/* regular commands ... */
 	} else if (strcmp(argv[argc-1], "OK")) {
-		mypublish("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0);
+		mypublish_change("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0, &saved_fail);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
 
 	} else if (!strcasecmp(argv[0], "at+cimi")) {
@@ -785,15 +786,15 @@ static int at_ll_write(const char *str)
 	if (ret < 0 && errno == EAGAIN) {
 		/* allow this */
 		if (++nsuccessiveblocks > 10) {
-			mypublish("fail", valuetostr("writev %7s: %i x %s", str, nsuccessiveblocks, ESTR(EAGAIN)), 0);
+			mypublish_change("fail", valuetostr("writev %7s: %i x %s", str, nsuccessiveblocks, ESTR(EAGAIN)), 0, &saved_fail);
 			mylog(LOG_ERR, "writev %s %s: %i x %s", atdev, str, nsuccessiveblocks, ESTR(EAGAIN));
 		}
 	} else if (ret < 0) {
 		ret = errno;
-		mypublish("fail", valuetostr("writev %7s: %s", str, ESTR(ret)), 0);
+		mypublish_change("fail", valuetostr("writev %7s: %s", str, ESTR(ret)), 0, &saved_fail);
 		mylog(LOG_ERR, "writev %s %7s: %s", atdev, str, ESTR(ret));
 	} else if (ret < vec[0].iov_len+vec[1].iov_len) {
-		mypublish("fail", valuetostr("writev %7s: incomplete", str), 0);
+		mypublish_change("fail", valuetostr("writev %7s: incomplete", str), 0, &saved_fail);
 		mylog(LOG_ERR, "writev %s %7s: incomplete %u/%u", atdev, str, ret, vec[0].iov_len+vec[1].iov_len);
 	} else {
 		double timeout = 5;
