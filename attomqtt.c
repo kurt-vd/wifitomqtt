@@ -176,6 +176,7 @@ static int scan_ok;
 static char *saved_brand;
 static char *saved_model;
 static char *saved_rev;
+static char *saved_imei;
 static char *saved_fail;
 
 static void changed_brand(void);
@@ -605,6 +606,8 @@ issue_at_copn:
 		publish_received_property("model", strip_quotes(strtok(str+7, ",")), &saved_model);
 	} else if (!strncasecmp(str, "+cgmr: ", 7)) {
 		publish_received_property("rev", strip_quotes(strtok(str+7, ",")), &saved_rev);
+	} else if (!strncasecmp(str, "+cgsn: ", 7)) {
+		publish_received_property("imei", strip_quotes(strtok(str+7, ",")), &saved_imei);
 
 	} else if (!strncasecmp(str, "+ceer: ", 7)) {
 		mypublish("warn", str+7, 0);
@@ -663,6 +666,10 @@ static void at_recvd_response(int argc, char *argv[])
 		if (argc > 2)
 			/* argv[1] is value */
 			publish_received_property("rev", strip_quotes(argv[1]), &saved_rev);
+	} else if (!strcasecmp(argv[0], "at+cgsn")) {
+		if (argc > 2)
+			/* argv[1] is value */
+			publish_received_property("imei", strip_quotes(argv[1]), &saved_imei);
 	}
 }
 
@@ -1134,6 +1141,7 @@ int main(int argc, char *argv[])
 	at_write("at+cgmi");
 	at_write("at+cgmm");
 	at_write("at+cgmr");
+	at_write("at+cgsn");
 
 	/* clear potentially retained values in the broker */
 	mypublish("rssi", NULL, 1);
@@ -1153,6 +1161,7 @@ int main(int argc, char *argv[])
 	mypublish("brand", NULL, 1);
 	mypublish("model", NULL, 1);
 	mypublish("rev", NULL, 1);
+	mypublish("imei", NULL, 1);
 	/* make sure to remove any retained scan results, set retained */
 	mypublish("ops", "", 1);
 
@@ -1245,6 +1254,8 @@ done:
 		mypublish("model", NULL, 1);
 	if (saved_rev)
 		mypublish("rev", NULL, 1);
+	if (saved_imei)
+		mypublish("imei", NULL, 1);
 	mypublish("ops", "", 0);
 
 	/* terminate */
