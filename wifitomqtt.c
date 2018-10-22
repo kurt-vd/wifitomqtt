@@ -1107,7 +1107,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 		} else if (!strcmp(toks[3], "psk")) {
 			/* ssid is first line of payload */
-			char *ssid = strtok((char *)msg->payload, "\n\r");
+			char *ssid = strtok((char *)msg->payload, "\n\r=");
 			/* psk is second line */
 			char *psk = strtok(NULL, "\n\r");
 #ifdef NOPLAINPSK
@@ -1141,7 +1141,7 @@ psk_done:;
 #endif
 		} else if (!strcmp(toks[3], "config") && ntoks == 5) {
 			/* ssid is first line of payload */
-			char *ssid = strtok((char *)msg->payload, "\n\r");
+			char *ssid = strtok((char *)msg->payload, "\n\r=");
 			/* key is toks[4] */
 			char *key = toks[4];
 
