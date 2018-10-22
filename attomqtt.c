@@ -727,6 +727,15 @@ static void at_recvd(char *line)
 			if (options & O_CEER)
 				at_ifnotqueued("at+ceer");
 			/* leave str as command response */
+		} else if (!strncmp(str, "+CFTPSGET: DATA,", 16)) {
+			static int receiving;
+			int siz = strtoul(str+16, NULL, 10);
+
+			if (!siz != !receiving)
+				mypublish("raw/ftpsget", siz ? "pending" : NULL, 0);
+			receiving = siz;
+			continue;
+
 		} else if (strchr("+*", *str) ||
 			((options & O_SIMCOM) && !strcmp(str+strlen(str)-5, " DONE"))) {
 			/* treat different */
