@@ -705,6 +705,7 @@ static void wpa_recvd_pkt(char *line)
 			nets_enabled_changed();
 		}
 		network_changed(net, 0);
+		wpa_save_config();
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
 		/* clear network list */
@@ -974,10 +975,6 @@ static void wpa_recvd_pkt(char *line)
 			remove_network(net);
 			nets_enabled_changed();
 		}
-
-	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
-		wpa_save_config();
-		nets_enabled_changed();
 
 	} else if (!mystrncmp("SELECT_NETWORK ", head->a)) {
 		int idx = strtoul(head->a + 15, NULL, 0);
