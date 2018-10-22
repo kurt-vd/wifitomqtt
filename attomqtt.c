@@ -734,6 +734,10 @@ static void at_recvd(char *line)
 				mypublish("raw/at", str, 0);
 			at_recvd_info(str);
 			continue;
+		} else if (!strq) {
+			/* received something without anything queued */
+			mypublish("raw/at", str, 0);
+			continue;
 		}
 		/* collect response */
 		argv[argc++] = str;
