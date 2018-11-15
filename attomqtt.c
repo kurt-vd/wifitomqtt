@@ -261,7 +261,7 @@ static struct operator *add_operator(const char *id, const char *name)
 	len = strlen(name ?: "");
 	op = malloc(sizeof(*op) + len);
 	if (!op)
-		mylog(LOG_ERR, "malloc %u: %s", sizeof(*op)+len, ESTR(errno));
+		mylog(LOG_ERR, "malloc %lu: %s", (long)sizeof(*op)+len, ESTR(errno));
 	memset(op, 0, sizeof(*op));
 	strncpy(op->id, id, sizeof(op->id));
 	op->idlen = strlen(op->id);
@@ -815,7 +815,7 @@ static int at_ll_write(const char *str)
 		mylog(LOG_ERR, "writev %s %7s: %s", atdev, str, ESTR(ret));
 	} else if (ret < vec[0].iov_len+vec[1].iov_len) {
 		mypublish_change("fail", valuetostr("writev %7s: incomplete", str), 0, &saved_fail);
-		mylog(LOG_ERR, "writev %s %7s: incomplete %u/%u", atdev, str, ret, vec[0].iov_len+vec[1].iov_len);
+		mylog(LOG_ERR, "writev %s %7s: incomplete %u/%lu", atdev, str, ret, (long)(vec[0].iov_len+vec[1].iov_len));
 	} else {
 		double timeout = 5;
 		nsuccessiveblocks = 0;
