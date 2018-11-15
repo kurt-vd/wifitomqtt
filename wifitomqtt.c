@@ -895,7 +895,7 @@ static void wpa_recvd_pkt(char *line)
 
 		id = strtoul(line, NULL, 0);
 		/* find oldest id-less network */
-		for (net = NULL, lp = networks; lp < networks+nnetworks; ++lp) {
+		for (net = NULL, npending = 0, lp = networks; lp < networks+nnetworks; ++lp) {
 			if (lp->id != -1)
 				continue;
 			++npending;
