@@ -559,6 +559,8 @@ static void remove_network_configs(struct network *net)
 	for (j = 0; j < net->ncfgs; ++j)
 		myfree(net->cfgs[j]);
 	myfree(net->cfgs);
+	net->ncfgs = 0;
+	net->cfgs = NULL;
 }
 
 static void wpa_recvd_pkt(char *line)
