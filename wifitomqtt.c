@@ -1390,7 +1390,7 @@ int main(int argc, char *argv[])
 	myfree(bsss);
 	for (j = 0; j < nnetworks; ++j) {
 		myfree(networks[j].ssid);
-		myfree(networks[j].psk);
+		remove_network_configs(&networks[j]);
 	}
 	myfree(networks);
 
