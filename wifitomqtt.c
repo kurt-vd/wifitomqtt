@@ -717,6 +717,8 @@ static void wpa_recvd_pkt(char *line)
 		/* parse lines */
 		int id;
 		char *ssid;
+		struct network *net;
+
 		for (line = strtok_r(line, "\r\n", &saveptr); line;
 				line = strtok_r(NULL, "\r\n", &saveptr)) {
 			if (!mystrncmp("network id", line))
@@ -724,9 +726,18 @@ static void wpa_recvd_pkt(char *line)
 				continue;
 			id = strtoul(strtok(line, "\t"), NULL, 0);
 			ssid = strtok(NULL, "\t");
+			for (net = networks; net < networks+nnetworks; ++net) {
+				if (!strcmp(ssid, net->ssid ?: "")) {
+					/* remove duplicates */
+					wpa_send("REMOVE_NETWORK %i", id);
+					mylog(LOG_WARNING, "remove duplicate ssid '%s'", ssid);
+					goto listitem_done;
+				}
+			}
 			add_network(id, ssid);
 			wpa_send("GET_NETWORK %i mode", id);
 			wpa_send("GET_NETWORK %i disabled", id);
+listitem_done:;
 		}
 		sort_networks();
 
