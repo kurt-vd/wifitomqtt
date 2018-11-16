@@ -921,6 +921,9 @@ listitem_done:;
 		net->id = id;
 		if (net->netflags & NF_REMOVE) {
 			wpa_send("REMOVE_NETWORK %i", id);
+			network_changed(net, 1);
+			remove_network(net);
+			nets_enabled_changed();
 			goto done;
 		}
 
@@ -979,15 +982,7 @@ listitem_done:;
 		}
 
 	} else if (!mystrncmp("REMOVE_NETWORK ", head->a)) {
-		int idx = strtoul(head->a + 15, NULL, 0);
-		struct network *net = find_network_by_id(idx);
-
-		if (net) {
-			network_changed(net, 1);
-			wpa_save_config();
-			remove_network(net);
-			nets_enabled_changed();
-		}
+		wpa_save_config();
 
 	} else if (!mystrncmp("SELECT_NETWORK ", head->a)) {
 		int idx = strtoul(head->a + 15, NULL, 0);
@@ -1113,9 +1108,12 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 		} else if (!strcmp(toks[3], "remove")) {
 			net = find_network_by_ssid((char *)msg->payload);
-			if (net && net->id >= 0)
+			if (net && net->id >= 0) {
 				wpa_send("REMOVE_NETWORK %i", net->id);
-			else if (net)
+				network_changed(net, 1);
+				remove_network(net);
+				nets_enabled_changed();
+			} else if (net)
 				net->netflags |= NF_REMOVE;
 
 		} else if (!strcmp(toks[3], "psk")) {
