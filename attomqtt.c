@@ -199,6 +199,7 @@ struct str {
 static struct str *strq, *strqlast;
 /* count successive blocked writes */
 static int nsuccessiveblocks;
+static int nsubsequenttimeouts;
 
 static void add_strq(const char *a)
 {
@@ -366,7 +367,15 @@ static void at_next_cmd(void *dat)
 static void at_timeout(void *dat)
 {
 	mypublish_change("fail", valuetostr("%s: timeout", strq->a), 0, &saved_fail);
-	mylog(LOG_WARNING, "%s: timeout", strq->a);
+	mylog(LOG_WARNING, "%s: timeout, removing ...", strq->a);
+	free(pop_strq());
+
+	++nsubsequenttimeouts;
+	if (nsubsequenttimeouts > 5)
+		mylog(LOG_ERR, "last %i commands got timeout, is the TTY responding? I quit",
+				nsubsequenttimeouts);
+
+	/* queue next cmd (if any) */
 	at_next_cmd(NULL);
 }
 
@@ -778,6 +787,8 @@ static void at_recvd(char *line)
 			argc = 1;
 			/* queue admin */
 			libt_remove_timeout(at_timeout, NULL);
+			/* reset timeout counter */
+			nsubsequenttimeouts = 0;
 			/* remove head from queue */
 			free(pop_strq());
 			/* issue next cmd to device */
