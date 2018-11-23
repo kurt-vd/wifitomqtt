@@ -67,7 +67,7 @@ static const char help_msg[] =
 	"	cgreg[=DELAY]	Enable periodic GPRS Registration monitoring\n"
 	"	cops[=DELAY]	Enable periodic operator monitoring\n"
 	"	ceer		Issue AT+CEER on error URC's\n"
-	"	simcom		Enable hack that waits for 'SMS DONE' EONS report after\n"
+	"	simcom		Enable hack that waits for 'PB DONE' EONS report after\n"
 	"			unsolicited '+SIM: READY', since simcom modems throw those EONS report\n"
 	"			in between regular output\n"
 	"	detachedscan	Run scan when modem is not registered, i.e. detach before scan\n"
@@ -462,7 +462,7 @@ issue_at_copn:
 			at_write("at+copn");
 			++my_copn;
 		}
-	} else if (!strcasecmp(str, "SMS DONE")) {
+	} else if (!strcasecmp(str, "PB DONE")) {
 		/* resume at+copn */
 		goto issue_at_copn;
 
