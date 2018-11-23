@@ -1144,6 +1144,14 @@ int main(int argc, char *argv[])
 	ignore_responses = 1;
 	/* enable echo */
 	at_write("ate0");
+
+	/* device info */
+	at_write("at+cgmi");
+	at_write("at+cgmm");
+	at_write("at+cgmr");
+	at_write("at+cgsn");
+
+	/* modem state */
 	at_write("at+cpin?");
 	if (options & O_CREG)
 		at_creg(NULL);
@@ -1166,12 +1174,6 @@ int main(int argc, char *argv[])
 		at_cops(NULL);
 	else
 		at_write("at+cops?");
-
-	/* device info */
-	at_write("at+cgmi");
-	at_write("at+cgmm");
-	at_write("at+cgmr");
-	at_write("at+cgsn");
 
 	/* clear potentially retained values in the broker */
 	mypublish("rssi", NULL, 1);
