@@ -452,10 +452,6 @@ static void at_recvd_info(char *str)
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
-			at_write("at+cspn?");
-			at_write("at+ccid");
-			at_write("at+cimi");
-			at_write("at+cnum");
 			if (options & O_SIMCOM) {
 				libt_add_timeout(10, simcom_fake_pbdone, NULL);
 				/* for simcom modem, don't issue at+copn
@@ -464,6 +460,10 @@ static void at_recvd_info(char *str)
 				return;
 			}
 issue_at_copn:
+			at_write("at+cspn?");
+			at_write("at+ccid");
+			at_write("at+cimi");
+			at_write("at+cnum");
 			at_write("at+copn");
 			++my_copn;
 		}
