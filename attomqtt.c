@@ -190,6 +190,10 @@ static int pri_nt;
 #define PRI_CREG	3
 #define PRI_COPS	2
 
+/* forward hack declarations */
+static void simcom_fake_pbdone(void *dat);
+static int pbdone_seen;
+
 /* command queue */
 struct str {
 	struct str *next;
@@ -452,17 +456,19 @@ static void at_recvd_info(char *str)
 			at_write("at+ccid");
 			at_write("at+cimi");
 			at_write("at+cnum");
-			if ((options & O_SIMCOM) &&
-					(!strq || strcasecmp(strq->a, "at+cpin?")))
+			if (options & O_SIMCOM) {
+				libt_add_timeout(10, simcom_fake_pbdone, NULL);
 				/* for simcom modem, don't issue at+copn
 				 * when +cpin arrives as URC (not in response of at+cpin?
 				 */
 				return;
+			}
 issue_at_copn:
 			at_write("at+copn");
 			++my_copn;
 		}
 	} else if (!strcasecmp(str, "PB DONE")) {
+		pbdone_seen = 1;
 		/* resume at+copn */
 		goto issue_at_copn;
 
@@ -1310,6 +1316,13 @@ done:
 	mosquitto_lib_cleanup();
 #endif
 	return 0;
+}
+
+/* some hacks */
+static void simcom_fake_pbdone(void *dat)
+{
+	if (!pbdone_seen)
+		at_recvd_info("PB DONE");
 }
 
 struct quirck {
