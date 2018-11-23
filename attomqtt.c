@@ -601,8 +601,8 @@ issue_at_copn:
 		char *num, *name;
 		struct operator *op;
 
-		num = strip_quotes(strtok(str+7, ","));
-		name = strip_quotes(strtok(NULL, ","));
+		num = strip_quotes(strtok(str+7, ",")) ?: "";
+		name = strip_quotes(strtok(NULL, ",")) ?: num;
 		op = add_operator(num, name);
 		if (!saved_simopid && saved_imsi && op && !strncmp(saved_imsi, op->id, op->idlen)) {
 			/* publish sim operator */
