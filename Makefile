@@ -1,5 +1,6 @@
 PROGS	= wifitomqtt
 PROGS	+= attomqtt
+PROGS	+= attest
 PROGS	+= ifaddrtomqtt
 default	: $(PROGS)
 
@@ -15,6 +16,12 @@ VERSION := $(shell git describe --tags --always)
 
 -include config.mk
 
+# common.c contains references to libmosquitto
+# allow to not link those at all, while using
+# other part
+CFLAGS += -ffunction-sections -fdata-sections
+LDFLAGS += -Wl,--gc-sections
+
 # avoid overruling the VERSION
 CPPFLAGS += -DVERSION=\"$(VERSION)\"
 
@@ -24,6 +31,10 @@ endif
 wifitomqtt: libet/libt.o common.o
 
 attomqtt: libet/libt.o common.o
+
+# attest is a small tiny program, remove mosquitto dependency
+attest: LDLIBS:=$(subst -lmosquitto,,$(LDLIBS))
+attest: common.o
 
 ifaddrtomqtt: libet/libt.o common.o
 
