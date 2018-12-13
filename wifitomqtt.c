@@ -113,7 +113,7 @@ static const char *iface = "wlan0";
 static int wpasock;
 static int have_bss_events;
 static int wpa_lost;
-static int self_ap; /* we are AP ourselve */
+static int curr_mode;
 static char curr_bssid[20];
 static int curr_level;
 static int noapbgscan;
@@ -184,6 +184,7 @@ struct network {
 #define NF_REMOVE	0x02 /* remove requested before ADD_NETWORK completed */
 	int flags;
 	/* use BF_ flags */
+	int mode; /* mode from config */
 	int createseq;
 	/* additional configurations to hold */
 	char **cfgs;
@@ -275,7 +276,6 @@ struct bss {
 		#define BF_EAP		0x04 /* 'e' */
 		#define BF_KNOWN	0x08 /* 'k' */
 		#define BF_DISABLED	0x10 /* 'd' */
-		#define BF_AP		0x20 /* 'a' is accesspoint mode */
 		#define BF_PRESENT	0x40 /* for re-adding */
 };
 
@@ -287,7 +287,7 @@ static const char *bssflagsstr(const struct bss *bss)
 	static char buf[16];
 	char *str;
 	int mask;
-	static const char indicators[] = "wWekda";
+	static const char indicators[] = "wWekd";
 	const char *pind;
 
 	str = buf;
@@ -322,7 +322,7 @@ static void sort_ap(void)
 static void compute_network_flags(struct bss *bss, const struct network *net)
 {
 	/* remove network related flags */
-	bss->flags = bss->flags & ~(BF_AP | BF_KNOWN | BF_DISABLED);
+	bss->flags = bss->flags & ~(BF_KNOWN | BF_DISABLED);
 	/* add network related flags */
 	if (net)
 		/* plain copy of the flags */
@@ -471,20 +471,20 @@ static void wpa_cmd_timeout(void *dat)
 
 static void wpa_keepalive(void *dat)
 {
-	if (!self_ap && curr_bssid[0])
+	if (!curr_mode && curr_bssid[0])
 		wpa_send("BSS %s", curr_bssid);
 	else
 		wpa_send("PING");
 }
 
-static struct network *find_last_apcfg(const struct network *exclude)
+static struct network *find_last_network_mode(const struct network *exclude, int mode)
 {
 	struct network *net, *ap = NULL;
 
 	for (net = networks; net < networks+nnetworks; ++net) {
 		if (net == exclude)
 			continue;
-		if (net->flags & BF_AP) {
+		if (net->mode == mode) {
 			if (!ap || (net->id > ap->id))
 				ap = net;
 		}
@@ -507,7 +507,7 @@ static void network_changed(const struct network *net, int removing)
 	}
 
 	/* keep track of 'lastAP' */
-	struct network *lastap = find_last_apcfg(removing ? net : NULL);
+	struct network *lastap = find_last_network_mode(removing ? net : NULL, 2);
 	int new_last_ap_id = lastap ? lastap->id : -1;
 
 	if (new_last_ap_id != last_ap_id) {
@@ -588,7 +588,7 @@ static void wpa_recvd_pkt(char *line)
 		/* process value */
 		tok = strtok(line+3, " \t");
 		if (!strcmp(tok, "CTRL-EVENT-CONNECTED")) {
-			if (!self_ap)
+			if (!curr_mode)
 				/* only set station when not connected as AP */
 				set_wifi_state("station");
 			wpa_send("STATUS");
@@ -596,11 +596,11 @@ static void wpa_recvd_pkt(char *line)
 			wpa_send("STATUS");
 			set_wifi_state("none");
 		} else if (!strcmp(tok, "AP-ENABLED")) {
-			self_ap = 1;
+			curr_mode = 2;
 			set_wifi_state("AP");
 			set_wifi_stations(0);
 		} else if (!strcmp(tok, "AP-DISABLED")) {
-			self_ap = 0;
+			curr_mode = 0;
 			/* issue scan request immediately */
 			wpa_send("SCAN");
 			set_wifi_stations(-1);
@@ -663,22 +663,18 @@ static void wpa_recvd_pkt(char *line)
 		net = find_network_by_id(id);
 		if (!net)
 			goto done;
-		int flags = net->flags;
 
 		if (!strcmp(name, "mode")) {
-			if (strtoul(line, NULL, 0) == 2)
-				net->flags |= BF_AP;
-			else
-				net->flags &= ~BF_AP;
+			net->mode = strtoul(line, NULL, 0);
+			network_changed(net, 0);
 		} else if (!strcmp(name, "disabled")) {
 			if (strtoul(line, NULL, 0))
 				net->flags |= BF_DISABLED;
 			else
 				net->flags &= ~BF_DISABLED;
 			nets_enabled_changed();
-		}
-		if (flags != net->flags)
 			network_changed(net, 0);
+		}
 
 	} else if (!mystrncmp("SET_NETWORK ", head->a)) {
 		int id;
@@ -695,18 +691,16 @@ static void wpa_recvd_pkt(char *line)
 			goto done;
 
 		if (!strcmp(prop, "mode")) {
-			if (!strcmp(value, "2"))
-				net->flags |= BF_AP;
-			else
-				net->flags &= ~BF_AP;
+			net->mode = strtoul(value, NULL, 0);
+			network_changed(net, 0);
 		} else if (!strcmp(prop, "disabled")) {
 			if (!strcmp(value, "1"))
 				net->flags |= BF_DISABLED;
 			else
 				net->flags &= ~BF_DISABLED;
 			nets_enabled_changed();
+			network_changed(net, 0);
 		}
-		network_changed(net, 0);
 		wpa_save_config();
 
 	} else if (!strcmp("LIST_NETWORKS", head->a)) {
@@ -823,7 +817,7 @@ listitem_done:;
 			sort_ap();
 		}
 		/* publish corresponding level */
-		if (!self_ap && !strcmp(curr_bssid, bssid ?: "")) {
+		if (!curr_mode && !strcmp(curr_bssid, bssid ?: "")) {
 			if (level != curr_level)
 				publish_value(valuetostr("%i", level), "net/%s/level", iface);
 			curr_level = level;
@@ -854,10 +848,12 @@ listitem_done:;
 
 		if (!pub_wifi_state) {
 			/* we just started, and this is the first iteration.
-			 * Fix self_ap and wifi_state
+			 * Fix curr_mode and wifi_state
 			 */
-			self_ap = !strcmp(mode ?: "", "AP");
-			if (self_ap) {
+			if (!strcmp(mode ?: "", "AP"))
+				curr_mode = 2;
+
+			if (curr_mode == 2) {
 				set_wifi_state("AP");
 				wpa_send("STA-FIRST");
 				set_wifi_stations(0);
@@ -870,7 +866,7 @@ listitem_done:;
 		}
 
 		publish_value(curr_bssid, "net/%s/bssid", iface);
-		if (freq && self_ap) {
+		if (freq && curr_mode) {
 			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
 			publish_value("", "net/%s/level", iface);
 			publish_value(ssid, "net/%s/ssid", iface);
@@ -1171,9 +1167,10 @@ psk_done:;
 			add_network_config(net, "mode", "2");
 			if (noapbgscan)
 				add_network_config(net, "bgscan", "\"\"");
+			net->mode = 2;
 			if (net->id < 0)
 				/* leave new AP network disabled */
-				net->flags |= BF_AP | BF_DISABLED;
+				net->flags |= BF_DISABLED;
 
 		} else if (!strcmp(toks[3], "create")) {
 			find_or_create_ssid((char *)msg->payload);
