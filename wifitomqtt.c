@@ -60,9 +60,9 @@ static const char help_msg[] =
 	"\n"
 	" -h, --host=HOST[:PORT]Specify alternate MQTT host+port\n"
 	" -i, --iface=IFACE	Control IFACE (default: wlan0)\n"
-	" -S, --no-ap-bgscan	Emit empty bgscan for AP networks\n"
+	" -S, --no-ap-bgscan	Emit empty bgscan for AP/Mesh networks\n"
 	"			This avoids warnings on devices that cannot scan\n"
-	"			while in AP mode\n"
+	"			while in AP/mesh mode\n"
 	"\n"
 	"Arguments\n"
 	" FILE|DEVICE	Read input from FILE or DEVICE\n"
@@ -197,6 +197,7 @@ static int netcreateseq;
 static struct network *networks;
 static int nnetworks, snetworks;
 static int last_ap_id = -1;
+static int last_mesh_id = -1;
 
 static int networkcmp(const void *a, const void *b)
 {
@@ -457,7 +458,7 @@ static int wpa_send(const char *fmt, ...)
 	add_strq(line);
 	mylog(LOG_DEBUG, "> %s", line);
 	free(line);
-	libt_add_timeout(1.5, wpa_cmd_timeout, NULL);
+	libt_add_timeout(3, wpa_cmd_timeout, NULL);
 	libt_add_timeout(5, wpa_keepalive, NULL);
 	return ret;
 }
@@ -513,6 +514,15 @@ static void network_changed(const struct network *net, int removing)
 	if (new_last_ap_id != last_ap_id) {
 		last_ap_id = new_last_ap_id;
 		publish_value(lastap ? lastap->ssid : "", "net/%s/lastAP", iface);
+	}
+
+	/* same for lastmesh */
+	struct network *lastmesh = find_last_network_mode(removing ? net : NULL, 5);
+	int new_last_mesh_id = lastmesh ? lastmesh->id : -1;
+
+	if (new_last_ap_id != last_mesh_id) {
+		last_mesh_id = new_last_mesh_id;
+		publish_value(lastmesh ? lastmesh->ssid : "", "net/%s/lastmesh", iface);
 	}
 }
 
@@ -608,6 +618,21 @@ static void wpa_recvd_pkt(char *line)
 			set_wifi_stations(nstations+1);
 		} else if (!strcmp(tok, "AP-STA-DISCONNECTED")) {
 			set_wifi_stations(nstations-1);
+
+		} else if (!strcmp(tok, "MESH-GROUP-STARTED")) {
+			curr_mode = 5;
+			set_wifi_state("mesh");
+			set_wifi_stations(0);
+
+		} else if (!strcmp(tok, "MESH-GROUP-REMOVED")) {
+			curr_mode = 0;
+			set_wifi_stations(-1);
+
+		} else if (!strcmp(tok, "MESH-PEER-CONNECTED")) {
+			set_wifi_stations(nstations+1);
+		} else if (!strcmp(tok, "MESH-PEER-DISCONNECTED")) {
+			set_wifi_stations(nstations-1);
+
 
 		} else if (!strcmp(tok, "CTRL-EVENT-BSS-ADDED")) {
 			strtok(NULL, " \t");
@@ -845,6 +870,8 @@ listitem_done:;
 			else if (!strcmp(tok, "wpa_state"))
 				wpastate = val;
 		}
+		if (!strcmp(curr_bssid, "00:00:00:00:00:00"))
+			curr_bssid[0] = 0;
 
 		if (!pub_wifi_state) {
 			/* we just started, and this is the first iteration.
@@ -852,11 +879,15 @@ listitem_done:;
 			 */
 			if (!strcmp(mode ?: "", "AP"))
 				curr_mode = 2;
+			else if (!strcmp(mode ?: "", "mesh"))
+				curr_mode = 5;
 
 			if (curr_mode == 2) {
 				set_wifi_state("AP");
 				wpa_send("STA-FIRST");
 				set_wifi_stations(0);
+			} else if (curr_mode == 5) {
+				set_wifi_state("mesh");
 			} else if (!strcmp(wpastate ?: "", "COMPLETED") && !strcmp(mode ?: "", "station")) {
 				set_wifi_state("station");
 				publish_value("", "net/%s/stations", iface);
@@ -1172,6 +1203,22 @@ psk_done:;
 				/* leave new AP network disabled */
 				net->flags |= BF_DISABLED;
 
+		} else if (!strcmp(toks[3], "mesh")) {
+			net = find_or_create_ssid((char *)msg->payload);
+
+			/* mesh-specific settings */
+			add_network_config(net, "mode", "5");
+			if (noapbgscan)
+				add_network_config(net, "bgscan", "\"\"");
+			net->mode = 5;
+			if (net->id < 0) {
+				/* set some defaults */
+				add_network_config(net, "key_mgmt", "NONE");
+				add_network_config(net, "frequency", "2437");
+				/* leave new mesh network disabled */
+				net->flags |= BF_DISABLED;
+			}
+
 		} else if (!strcmp(toks[3], "create")) {
 			find_or_create_ssid((char *)msg->payload);
 		}
@@ -1378,6 +1425,7 @@ int main(int argc, char *argv[])
 	publish_value("", "net/%s/level", iface);
 	publish_value("", "net/%s/ssid", iface);
 	publish_value("", "net/%s/lastAP", iface);
+	publish_value("", "net/%s/lastmesh", iface);
 	publish_value("", "net/%s/stations", iface);
 	publish_value("", "net/%s/wifistate", iface);
 
