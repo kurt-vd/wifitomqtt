@@ -387,6 +387,7 @@ static void hide_ap_mqtt(const char *bssid)
 /* aggregated state */
 static const char *real_wifi_state;
 static const char *pub_wifi_state;
+static int selectedmode = -1; /* selected wpa_supplicant mode */
 static int is_mode_off(void)
 {
 	struct network *net;
@@ -395,6 +396,8 @@ static int is_mode_off(void)
 
 	/* find if all networks are disabled. Go off in that case */
 	for (net = networks, j = 0; j < nnetworks; ++net, ++j) {
+		if (selectedmode >= 0 && net->mode != selectedmode)
+			continue;
 		++nnet;
 		if (net->flags & BF_DISABLED)
 			++ndis;
@@ -1102,11 +1105,13 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 
 		if (!strcmp(toks[3], "set")) {
 			/* select new ssid. Do this only for new msgs (!retained) */
-			if (!msg->payloadlen || !strcmp(msg->payload, "none"))
+			if (!msg->payloadlen || !strcmp(msg->payload, "none")) {
 				wpa_send("DISABLE_NETWORK all");
-			else if (!strcmp(msg->payload, "all"))
+				selectedmode = -1;
+			} else if (!strcmp(msg->payload, "all")) {
 				wpa_send("ENABLE_NETWORK all");
-			else {
+				selectedmode = -1;
+			} else {
 				struct network *net;
 
 				net = find_network_by_ssid(msg->payload ?: "");
@@ -1125,6 +1130,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			else if (net)
 				/* queue flags already */
 				net->flags &= ~BF_DISABLED;
+			selectedmode = -1;
 
 		} else if (!strcmp(toks[3], "disable")) {
 			net = find_network_by_ssid((char *)msg->payload);
@@ -1132,6 +1138,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 				wpa_send("DISABLE_NETWORK %i", net->id);
 			else if (net)
 				net->flags |= BF_DISABLED;
+			selectedmode = -1;
 
 		} else if (!strcmp(toks[3], "remove")) {
 			net = find_network_by_ssid((char *)msg->payload);
@@ -1227,8 +1234,54 @@ psk_done:;
 			!strcmp(toks[1], iface) &&
 			!strcmp(toks[2], "wifi") &&
 			!strcmp(toks[3], "config")) {
-
 		wpa_send("SET %s %s", toks[4], (char *)msg->payload);
+
+	} else if (ntoks == 4 &&
+			!strcmp(toks[0], "net") &&
+			!strcmp(toks[1], iface) &&
+			!strcmp(toks[2], "wifistate") &&
+			!strcmp(toks[3], "set")) {
+		if (!strcmp((char *)msg->payload, "off")) {
+			wpa_send("ENABLE_NETWORK none");
+			selectedmode = -1;
+
+		} else if (!strcmp((char *)msg->payload, "any")) {
+			wpa_send("ENABLE_NETWORK all");
+			selectedmode = -1;
+
+		} else {
+			static const char *modes[] = {
+				[0] = "station",
+				[2] = "AP",
+				[5] = "mesh",
+			};
+			selectedmode = -1;
+			int j;
+
+			for (j = 0; j < sizeof(modes)/sizeof(modes[0]); ++j) {
+				if (modes[j] && !strcasecmp(modes[j], (char *)msg->payload)) {
+					selectedmode = j;
+					break;
+				}
+			}
+
+			mylog(LOG_INFO, "selected wifi mode %s (%i)", (char *)msg->payload, selectedmode);
+			/* disable all networks, and enable those of the new mode */
+			for (j = 0; j < nnetworks; ++j) {
+				if (networks[j].id < 0) {
+					if (networks[j].mode == selectedmode)
+						networks[j].flags &= ~BF_DISABLED;
+					else
+						networks[j].flags |= BF_DISABLED;
+
+				} else if (networks[j].mode == selectedmode && networks[j].flags & BF_DISABLED) {
+					wpa_send("ENABLE_NETWORK %i", networks[j].id);
+
+				} else if (networks[j].mode != selectedmode && !(networks[j].flags & BF_DISABLED)) {
+					wpa_send("DISABLE_NETWORK %i", networks[j].id);
+				}
+			}
+		}
 	}
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
 }
@@ -1362,6 +1415,7 @@ int main(int argc, char *argv[])
 		mylog(LOG_ERR, "mosquitto_connect %s:%i: %s", mqtt_host, mqtt_port, mosquitto_strerror(ret));
 	mosquitto_message_callback_set(mosq, my_mqtt_msg);
 	subscribe_topic("net/%s/ssid/+", iface);
+	subscribe_topic("net/%s/wifistate/set", iface);
 
 	/* prepare poll */
 	pf[0].fd = wpasock;
