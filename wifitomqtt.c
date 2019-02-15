@@ -754,8 +754,8 @@ static void wpa_recvd_pkt(char *line)
 				}
 			}
 			add_network(id, ssid);
-			wpa_send("GET_NETWORK %i mode", id);
 			wpa_send("GET_NETWORK %i disabled", id);
+			wpa_send("GET_NETWORK %i mode", id);
 listitem_done:;
 		}
 		sort_networks();
