@@ -385,7 +385,7 @@ static void hide_ap_mqtt(const char *bssid)
 }
 
 /* aggregated state */
-static const char *req_wifi_state;
+static const char *real_wifi_state;
 static const char *pub_wifi_state;
 static int is_mode_off(void)
 {
@@ -403,7 +403,7 @@ static int is_mode_off(void)
 }
 static void set_wifi_state(const char *str)
 {
-	req_wifi_state = str;
+	real_wifi_state = str;
 	if (is_mode_off())
 		/* publish mode 'off' if all is disabled */
 		str = "off";
@@ -417,7 +417,7 @@ static void set_wifi_state(const char *str)
 static inline void nets_enabled_changed(void)
 {
 	/* repeat wifi state, maybe some networks were enabled/disabled */
-	set_wifi_state(req_wifi_state);
+	set_wifi_state(real_wifi_state);
 }
 
 
