@@ -1242,7 +1242,7 @@ psk_done:;
 			!strcmp(toks[2], "wifistate") &&
 			!strcmp(toks[3], "set")) {
 		if (!strcmp((char *)msg->payload, "off")) {
-			wpa_send("ENABLE_NETWORK none");
+			wpa_send("DISABLE_NETWORK all");
 			selectedmode = -1;
 
 		} else if (!strcmp((char *)msg->payload, "any")) {
