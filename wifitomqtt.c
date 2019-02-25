@@ -1265,6 +1265,11 @@ psk_done:;
 				}
 			}
 
+			if (selectedmode != j) {
+				mylog(LOG_INFO, "selected unknown wifi mode %s", (char *)msg->payload);
+				goto wifimodeset_done;
+			}
+
 			mylog(LOG_INFO, "selected wifi mode %s (%i)", (char *)msg->payload, selectedmode);
 			/* disable all networks, and enable those of the new mode */
 			for (j = 0; j < nnetworks; ++j) {
@@ -1281,7 +1286,12 @@ psk_done:;
 					wpa_send("DISABLE_NETWORK %i", networks[j].id);
 				}
 			}
+			/* clear current SSID, before ack of new wifistate */
+			publish_value("", "net/%s/ssid", iface);
+			set_wifi_state(modes[selectedmode]);
 		}
+wifimodeset_done:
+		;
 	}
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
 }
