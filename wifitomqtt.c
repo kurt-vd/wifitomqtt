@@ -1448,6 +1448,11 @@ int main(int argc, char *argv[])
 		libt_flush();
 		if (wpa_lost)
 			break;
+		if (mosquitto_want_write(mosq)) {
+			ret = mosquitto_loop_write(mosq, 1);
+			if (ret)
+				mylog(LOG_WARNING, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
+		}
 		ret = poll(pf, 2, libt_get_waittime());
 		if (ret < 0 && errno == EINTR)
 			continue;
@@ -1472,12 +1477,6 @@ int main(int argc, char *argv[])
 			if (ret) {
 				mylog(LOG_WARNING, "mosquitto_loop_read: %s", mosquitto_strerror(ret));
 				break;
-			}
-		}
-		if (mosquitto_want_write(mosq)) {
-			ret = mosquitto_loop_write(mosq, 1);
-			if (ret) {
-				mylog(LOG_WARNING, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
 			}
 		}
 	}
