@@ -32,6 +32,7 @@
 #include <locale.h>
 #include <poll.h>
 #include <syslog.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <mosquitto.h>
@@ -117,19 +118,6 @@ static int curr_mode;
 static char curr_bssid[20];
 static int curr_level;
 static int noapbgscan;
-
-/* signalling */
-static int mysignal(int signr, void (*fn)(int))
-{
-	struct sigaction sa = {
-		.sa_handler = fn,
-	};
-	return sigaction(signr, &sa, NULL);
-}
-static void onsigterm(int signr)
-{
-	sigterm = 1;
-}
 
 static void myfree(void *dat)
 {
@@ -1375,7 +1363,7 @@ int main(int argc, char *argv[])
 	int opt, ret, j;
 	char *str;
 	char mqtt_name[32];
-	struct pollfd pf[2];
+	struct pollfd pf[3];
 
 	setlocale(LC_ALL, "");
 	/* argument parsing */
@@ -1413,8 +1401,6 @@ int main(int argc, char *argv[])
 	}
 
 	setmylog(NAME, 0, LOG_LOCAL2, loglevel);
-	mysignal(SIGINT, onsigterm);
-	mysignal(SIGTERM, onsigterm);
 
 	/* WPA */
 	wpasock = wpa_connect(iface);
@@ -1438,13 +1424,28 @@ int main(int argc, char *argv[])
 
 	libt_add_timeout(0, do_mqtt_maintenance, mosq);
 
+	/* prepare signalfd */
+	struct signalfd_siginfo sfdi;
+	sigset_t sigmask;
+	int sigfd;
+
+	sigemptyset(&sigmask);
+	sigfillset(&sigmask);
+
+	if (sigprocmask(SIG_BLOCK, &sigmask, NULL) < 0)
+		mylog(LOG_ERR, "sigprocmask: %s", ESTR(errno));
+	sigfd = signalfd(-1, &sigmask, SFD_NONBLOCK | SFD_CLOEXEC);
+	if (sigfd < 0)
+		mylog(LOG_ERR, "signalfd failed: %s", ESTR(errno));
 	/* prepare poll */
 	pf[0].fd = wpasock;
 	pf[0].events = POLL_IN;
 	pf[1].fd = mosquitto_socket(mosq);
 	pf[1].events = POLL_IN;
+	pf[2].fd = sigfd;
+	pf[2].events = POLL_IN;
 
-	while (!sigterm) {
+	for (;;) {
 		libt_flush();
 		if (wpa_lost)
 			break;
@@ -1453,7 +1454,7 @@ int main(int argc, char *argv[])
 			if (ret)
 				mylog(LOG_WARNING, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
 		}
-		ret = poll(pf, 2, libt_get_waittime());
+		ret = poll(pf, 3, libt_get_waittime());
 		if (ret < 0 && errno == EINTR)
 			continue;
 		if (ret < 0)
@@ -1479,7 +1480,21 @@ int main(int argc, char *argv[])
 				break;
 			}
 		}
+		while (pf[2].revents) {
+			ret = read(sigfd, &sfdi, sizeof(sfdi));
+			if (ret < 0 && errno == EAGAIN)
+				break;
+			if (ret < 0)
+				mylog(LOG_ERR, "read signalfd: %s", ESTR(errno));
+			switch (sfdi.ssi_signo) {
+			case SIGTERM:
+			case SIGINT:
+				goto done;
+				break;
+			}
+		}
 	}
+done:
 
 	/* clean scan results in mqtt */
 	for (j = 0; j < nbsss; ++j) {
