@@ -1360,6 +1360,15 @@ static void subscribe_topic(const char *topicfmt, ...)
 	free(topic);
 }
 
+static void do_mqtt_maintenance(void *dat)
+{
+	int ret;
+
+	ret = mosquitto_loop_misc(mosq);
+	if (ret)
+		mylog(LOG_ERR, "mosquitto_loop_misc: %s", mosquitto_strerror(ret));
+	libt_add_timeout(1, do_mqtt_maintenance, dat);
+}
 
 int main(int argc, char *argv[])
 {
@@ -1427,6 +1436,8 @@ int main(int argc, char *argv[])
 	subscribe_topic("net/%s/ssid/+", iface);
 	subscribe_topic("net/%s/wifistate/set", iface);
 
+	libt_add_timeout(0, do_mqtt_maintenance, mosq);
+
 	/* prepare poll */
 	pf[0].fd = wpasock;
 	pf[0].events = POLL_IN;
@@ -1462,12 +1473,6 @@ int main(int argc, char *argv[])
 				mylog(LOG_WARNING, "mosquitto_loop_read: %s", mosquitto_strerror(ret));
 				break;
 			}
-		}
-		/* mosquitto things to do each iteration */
-		ret = mosquitto_loop_misc(mosq);
-		if (ret) {
-			mylog(LOG_WARNING, "mosquitto_loop_misc: %s", mosquitto_strerror(ret));
-			break;
 		}
 		if (mosquitto_want_write(mosq)) {
 			ret = mosquitto_loop_write(mosq, 1);
