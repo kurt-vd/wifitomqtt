@@ -2,6 +2,7 @@
 *.o
 wifitomqtt
 attomqtt
+atinsert
 attest
 ifaddrtomqtt
 

@@ -1,5 +1,6 @@
 PROGS	= wifitomqtt
 PROGS	+= attomqtt
+PROGS	+= atinsert
 PROGS	+= attest
 PROGS	+= ifaddrtomqtt
 default	: $(PROGS)
