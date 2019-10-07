@@ -128,10 +128,8 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *userdata, const struct mos
 		}
 	}
 	++cmds;
-	if (!*cmds) {
-		failed = 0;
+	if (!*cmds)
 		goto terminate;
-	}
 
 	if (failexit > 1) {
 		ret = mosquitto_publish(mosq, NULL, topicsend, strlen(*cmds), *cmds, mqtt_qos, 0);
