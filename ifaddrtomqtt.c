@@ -403,7 +403,7 @@ int main(int argc, char *argv[])
 	send_self_sync(mosq, mqtt_qos);
 	while (!ready) {
 		ret = mosquitto_loop(mosq, 10, 1);
-		if (ret < 0)
+		if (ret)
 			mylog(LOG_ERR, "mosquitto_loop: %s", mosquitto_strerror(ret));
 	}
 
