@@ -1231,6 +1231,9 @@ int main(int argc, char *argv[])
 			ret = mosquitto_loop_read(mosq, 1);
 			if (ret) {
 				mylog(LOG_WARNING, "mosquitto_loop_read: %s", mosquitto_strerror(ret));
+				if (ret == MOSQ_ERR_CONN_LOST)
+					/* no use to try to publish more */
+					exit(1);
 				break;
 			}
 		}
