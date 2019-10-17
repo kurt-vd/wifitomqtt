@@ -584,7 +584,7 @@ static void wpa_recvd_pkt(char *line)
 		/* don't use publish_value, it has hardcoded retain=1 */
 		sprintf(topic, "tmp/%s/wpa", iface);
 		ret = mosquitto_publish(mosq, NULL, topic, strlen(line+3), line+3, mqtt_qos, 0);
-		if (ret < 0)
+		if (ret)
 			mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 		/* process value */
 		tok = strtok(line+3, " \t");
@@ -1083,7 +1083,7 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 	int ntoks;
 
 	ret = mosquitto_sub_topic_tokenise(msg->topic, &toks, &ntoks);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto tokenize %s: %s", msg->topic, mosquitto_strerror(ret));
 	if (ntoks >= 4 &&
 			!strcmp(toks[0], "net") &&
@@ -1296,7 +1296,7 @@ static void publish_value(const char *value, const char *topicfmt, ...)
 
 	/* publish cache */
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value ?: ""), value, mqtt_qos, 1);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 }
 
@@ -1315,7 +1315,7 @@ static void publish_failure(const char *valuefmt, ...)
 
 	/* publish cache */
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value), value, mqtt_qos, 0);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 }
 
@@ -1343,7 +1343,7 @@ static void subscribe_topic(const char *topicfmt, ...)
 
 	/* publish cache */
 	ret = mosquitto_subscribe(mosq, NULL, topic, mqtt_qos);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_subscribe %s: %s", topic, mosquitto_strerror(ret));
 	free(topic);
 }

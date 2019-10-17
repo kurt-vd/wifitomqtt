@@ -68,7 +68,7 @@ void send_self_sync(struct mosquitto *mosq, int qos)
 	if (ret)
 		mylog(LOG_ERR, "mosquitto_subscribe %s: %s", selfsynctopic, mosquitto_strerror(ret));
 	ret = mosquitto_publish(mosq, NULL, selfsynctopic, strlen(myuuid), myuuid, qos, 0);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", selfsynctopic, mosquitto_strerror(ret));
 }
 

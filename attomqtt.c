@@ -954,7 +954,7 @@ static void mypublish(const char *bare_topic, const char *value, int retain)
 
 	/* publish cache */
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value ?: ""), value, mqtt_qos, retain);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 }
 
@@ -970,7 +970,7 @@ static void subscribe_topic(const char *topicfmt, ...)
 
 	/* publish cache */
 	ret = mosquitto_subscribe(mosq, NULL, topic, mqtt_qos);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_subscribe %s: %s", topic, mosquitto_strerror(ret));
 	free(topic);
 }

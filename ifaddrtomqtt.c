@@ -204,7 +204,7 @@ static void publish_value(const char *value, const char *topicfmt, ...)
 
 	/* publish cache */
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value ?: ""), value, mqtt_qos, 1);
-	if (ret < 0)
+	if (ret)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
 }
 
