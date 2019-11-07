@@ -511,7 +511,7 @@ static void network_changed(const struct network *net, int removing)
 	struct network *lastmesh = find_last_network_mode(removing ? net : NULL, 5);
 	int new_last_mesh_id = lastmesh ? lastmesh->id : -1;
 
-	if (new_last_ap_id != last_mesh_id) {
+	if (new_last_mesh_id != last_mesh_id) {
 		last_mesh_id = new_last_mesh_id;
 		publish_value(lastmesh ? lastmesh->ssid : "", "net/%s/lastmesh", iface);
 	}
