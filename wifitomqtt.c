@@ -808,6 +808,11 @@ listitem_done:;
 		}
 		struct bss *bss;
 
+		if (ssid && !strncmp(ssid, "\\x00", 4))
+			/* ignore ssid's that start with \x00
+			 * it's most probably a hidden ssid */
+			goto done;
+
 		bss = find_ap_by_bssid(bssid);
 		if (bss) {
 			if (bss->freq != freq)
