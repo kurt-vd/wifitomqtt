@@ -245,7 +245,7 @@ static void remove_network(struct network *net)
 	/* remove element, keep sorted */
 	int idx = net - networks;
 	if (idx != nnetworks-1)
-		memcpy(net, net+1, (nnetworks-1-idx)*sizeof(*networks));
+		memmove(net, net+1, (nnetworks-1-idx)*sizeof(*networks));
 	--nnetworks;
 }
 
