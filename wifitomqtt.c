@@ -490,6 +490,8 @@ static void network_changed(const struct network *net, int removing)
 	struct bss *bss;
 
 	for (j = 0, bss = bsss; j < nbsss; ++j, ++bss) {
+		if (!bss->ssid)
+			continue;
 		if (strcmp(bss->ssid, net->ssid))
 			continue;
 		flags = bss->flags;
@@ -833,7 +835,8 @@ listitem_done:;
 			publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
 			/* publish flags as last */
 			compute_flags(bss, flags);
-			compute_network_flags(bss, find_network_by_ssid(bss->ssid));
+			if (bss->ssid)
+				compute_network_flags(bss, find_network_by_ssid(bss->ssid));
 			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
 			sort_ap();
 		}
