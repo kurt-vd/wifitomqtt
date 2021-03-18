@@ -1259,38 +1259,22 @@ done:
 	if (saved_ber != 99)
 		/* clear rssi */
 		mypublish("ber", NULL, 1);
-	if (saved_op)
-		mypublish("op", NULL, 1);
-	if (saved_opid)
-		mypublish("opid", NULL, 1);
-	if (saved_nt)
-		mypublish("nt", NULL, 1);
-	if (saved_reg)
-		mypublish("reg", NULL, 1);
-	if (saved_greg)
-		mypublish("greg", NULL, 1);
-	if (saved_lac)
-		mypublish("lac", NULL, 1);
-	if (saved_cellid)
-		mypublish("cellid", NULL, 1);
-	if (saved_imsi)
-		mypublish("imsi", NULL, 1);
-	if (saved_iccid)
-		mypublish("iccid", NULL, 1);
-	if (saved_number)
-		mypublish("number", NULL, 1);
-	if (saved_simop)
-		mypublish("simop", NULL, 1);
-	if (saved_simopid)
-		mypublish("simopid", NULL, 1);
-	if (saved_brand)
-		mypublish("brand", NULL, 1);
-	if (saved_model)
-		mypublish("model", NULL, 1);
-	if (saved_rev)
-		mypublish("rev", NULL, 1);
-	if (saved_imei)
-		mypublish("imei", NULL, 1);
+	mypublish_change("op", NULL, 1, &saved_op);
+	mypublish_change("opid", NULL, 1, &saved_opid);
+	mypublish_change("nt", NULL, 1, &saved_nt);
+	mypublish_change("reg", NULL, 1, &saved_reg);
+	mypublish_change("greg", NULL, 1, &saved_greg);
+	mypublish_change("lac", NULL, 1, &saved_lac);
+	mypublish_change("cellid", NULL, 1, &saved_cellid);
+	mypublish_change("imsi", NULL, 1, &saved_imsi);
+	mypublish_change("iccid", NULL, 1, &saved_iccid);
+	mypublish_change("number", NULL, 1, &saved_number);
+	mypublish_change("simop", NULL, 1, &saved_simop);
+	mypublish_change("simopid", NULL, 1, &saved_simopid);
+	mypublish_change("brand", NULL, 1, &saved_brand);
+	mypublish_change("model", NULL, 1, &saved_model);
+	mypublish_change("rev", NULL, 1, &saved_rev);
+	mypublish_change("imei", NULL, 1, &saved_imei);
 	mypublish("ops", "", 0);
 
 	/* terminate */
