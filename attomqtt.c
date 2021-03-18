@@ -395,6 +395,10 @@ static int mypublish_change(const char *mqttname, const char *str, int retain, c
 			changed_brand();
 		else if (pcache == &saved_model)
 			changed_model();
+		else if (pcache == &saved_opid) {
+			struct operator *op = opid_to_operator(saved_opid);
+			publish_received_property("op", op ? op->name : NULL, &saved_op);
+		}
 		return 1;
 	} else
 		return 0;
@@ -591,10 +595,6 @@ issue_at_copn:
 			strtok(str+7, ",");
 			strtok(NULL, ",");
 			publish_received_property("opid", strip_quotes(strtok(NULL, ",")), &saved_opid);
-
-			struct operator *op = opid_to_operator(saved_opid);
-			if (op)
-				publish_received_property("op", op->name, &saved_op);
 			publish_received_property_pri("nt", ntstr(strtoul(strtok(NULL, ",") ?: "-1", NULL, 0)), &saved_nt, PRI_COPS, &pri_nt);
 		}
 	} else if (!strncasecmp(str, "+copn: ", 7)) {
