@@ -102,12 +102,13 @@ static int mqtt_qos = -1;
 
 /* state */
 static struct mosquitto *mosq;
-__attribute__((format(printf,2,3)))
-static void publish_value(const char *value, const char *topicfmt, ...);
+static void publish_value(const char *value, const char *topic);
 __attribute__((format(printf,1,2)))
 static void publish_failure(const char *valuefmt, ...);
 __attribute__((format(printf,1,2)))
 static const char *valuetostr(const char *fmt, ...);
+__attribute__((format(printf,1,2)))
+static const char *topicfmt(const char *fmt, ...);
 
 /* WPA */
 static const char *iface = "wlan0";
@@ -366,10 +367,10 @@ static void remove_ap(struct bss *bss)
 
 static void hide_ap_mqtt(const char *bssid)
 {
-	publish_value("", "net/%s/bss/%s/freq", iface, bssid);
-	publish_value("", "net/%s/bss/%s/level", iface, bssid);
-	publish_value("", "net/%s/bss/%s/flags", iface, bssid);
-	publish_value("", "net/%s/bss/%s/ssid", iface, bssid);
+	publish_value("", topicfmt("net/%s/bss/%s/freq", iface, bssid));
+	publish_value("", topicfmt("net/%s/bss/%s/level", iface, bssid));
+	publish_value("", topicfmt("net/%s/bss/%s/flags", iface, bssid));
+	publish_value("", topicfmt("net/%s/bss/%s/ssid", iface, bssid));
 }
 
 /* aggregated state */
@@ -402,7 +403,7 @@ static void set_wifi_state(const char *str)
 	if (!strcmp(str, pub_wifi_state ?: ""))
 		return;
 	mylog(LOG_INFO, "state %s => %s", pub_wifi_state ?: "", str);
-	publish_value(str, "net/%s/wifistate", iface);
+	publish_value(str, topicfmt("net/%s/wifistate", iface));
 	pub_wifi_state = str;
 }
 static inline void nets_enabled_changed(void)
@@ -421,7 +422,7 @@ static void set_wifi_stations(int n)
 	sprintf(buf, "%i", n);
 	if (n < 0)
 		strcpy(buf, "");
-	publish_value(buf, "net/%s/stations", iface);
+	publish_value(buf, topicfmt("net/%s/stations", iface));
 }
 
 /* wpa functions */
@@ -497,7 +498,7 @@ static void network_changed(const struct network *net, int removing)
 		flags = bss->flags;
 		compute_network_flags(bss, removing ? NULL : net);
 		if (flags != bss->flags)
-			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bss->bssid);
+			publish_value(bssflagsstr(bss), topicfmt("net/%s/bss/%s/flags", iface, bss->bssid));
 	}
 
 	/* keep track of 'lastAP' */
@@ -506,7 +507,7 @@ static void network_changed(const struct network *net, int removing)
 
 	if (new_last_ap_id != last_ap_id) {
 		last_ap_id = new_last_ap_id;
-		publish_value(lastap ? lastap->ssid : "", "net/%s/lastAP", iface);
+		publish_value(lastap ? lastap->ssid : "", topicfmt("net/%s/lastAP", iface));
 	}
 
 	/* same for lastmesh */
@@ -515,7 +516,7 @@ static void network_changed(const struct network *net, int removing)
 
 	if (new_last_mesh_id != last_mesh_id) {
 		last_mesh_id = new_last_mesh_id;
-		publish_value(lastmesh ? lastmesh->ssid : "", "net/%s/lastmesh", iface);
+		publish_value(lastmesh ? lastmesh->ssid : "", topicfmt("net/%s/lastmesh", iface));
 	}
 }
 
@@ -818,32 +819,39 @@ listitem_done:;
 		bss = find_ap_by_bssid(bssid);
 		if (bss) {
 			if (bss->freq != freq)
-				publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
+				publish_value(valuetostr("%.3lfG", freq*1e-3),
+						topicfmt("net/%s/bss/%s/freq", iface, bssid));
 			if (bss->level != level)
-				publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
+				publish_value(valuetostr("%i", level),
+						topicfmt("net/%s/bss/%s/level", iface, bssid));
 			bss->freq = freq;
 			bss->level = level;
 			int savedflags = bss->flags;
 			compute_flags(bss, flags);
 			if (savedflags != bss->flags)
-				publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
+				publish_value(bssflagsstr(bss),
+						topicfmt("net/%s/bss/%s/flags", iface, bssid));
 		} else if (bssid) {
 			struct bss *bss = add_ap(bssid, freq, level, ssid);
 
-			publish_value(ssid, "net/%s/bss/%s/ssid", iface, bssid);
-			publish_value(valuetostr("%.3lfG", freq*1e-3), "net/%s/bss/%s/freq", iface, bssid);
-			publish_value(valuetostr("%i", level), "net/%s/bss/%s/level", iface, bssid);
+			publish_value(ssid, topicfmt("net/%s/bss/%s/ssid", iface, bssid));
+			publish_value(valuetostr("%.3lfG", freq*1e-3),
+					topicfmt("net/%s/bss/%s/freq", iface, bssid));
+			publish_value(valuetostr("%i", level),
+					topicfmt("net/%s/bss/%s/level", iface, bssid));
 			/* publish flags as last */
 			compute_flags(bss, flags);
 			if (bss->ssid)
 				compute_network_flags(bss, find_network_by_ssid(bss->ssid));
-			publish_value(bssflagsstr(bss), "net/%s/bss/%s/flags", iface, bssid);
+			publish_value(bssflagsstr(bss),
+					topicfmt("net/%s/bss/%s/flags", iface, bssid));
 			sort_ap();
 		}
 		/* publish corresponding level */
 		if (!curr_mode && !strcmp(curr_bssid, bssid ?: "")) {
 			if (level != curr_level)
-				publish_value(valuetostr("%i", level), "net/%s/level", iface);
+				publish_value(valuetostr("%i", level),
+						topicfmt("net/%s/level", iface));
 			curr_level = level;
 		}
 	} else if (!strcmp("STATUS", head->a)) {
@@ -889,30 +897,33 @@ listitem_done:;
 				set_wifi_state("mesh");
 			} else if (!strcmp(wpastate ?: "", "COMPLETED") && !strcmp(mode ?: "", "station")) {
 				set_wifi_state("station");
-				publish_value("", "net/%s/stations", iface);
+				publish_value("", topicfmt("net/%s/stations", iface));
 			} else {
 				set_wifi_state("none");
 			}
 		}
 
-		publish_value(curr_bssid, "net/%s/bssid", iface);
+		publish_value(curr_bssid, topicfmt("net/%s/bssid", iface));
 		if (freq && curr_mode) {
-			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
-			publish_value("", "net/%s/level", iface);
-			publish_value(ssid, "net/%s/ssid", iface);
+			publish_value(valuetostr("%.3lfG",freq*1e-3),
+					topicfmt("net/%s/freq", iface));
+			publish_value("", topicfmt("net/%s/level", iface));
+			publish_value(ssid, topicfmt("net/%s/ssid", iface));
 		} else if (freq && curr_bssid[0]) {
-			publish_value(valuetostr("%.3lfG",freq*1e-3), "net/%s/freq", iface);
+			publish_value(valuetostr("%.3lfG",freq*1e-3),
+					topicfmt("net/%s/freq", iface));
 			struct bss *bss = find_ap_by_bssid(curr_bssid);
 			if (bss) {
 				if (curr_level != bss->level)
-					publish_value(valuetostr("%i", bss->level), "net/%s/level", iface);
+					publish_value(valuetostr("%i", bss->level),
+							topicfmt("net/%s/level", iface));
 				curr_level = bss->level;
 			}
-			publish_value(ssid, "net/%s/ssid", iface);
+			publish_value(ssid, topicfmt("net/%s/ssid", iface));
 		} else {
-			publish_value("", "net/%s/freq", iface);
-			publish_value("", "net/%s/level", iface);
-			publish_value("", "net/%s/ssid", iface);
+			publish_value("", topicfmt("net/%s/freq", iface));
+			publish_value("", topicfmt("net/%s/level", iface));
+			publish_value("", topicfmt("net/%s/ssid", iface));
 			curr_level = 0;
 		}
 
@@ -1283,7 +1294,7 @@ psk_done:;
 				}
 			}
 			/* clear current SSID, before ack of new wifistate */
-			publish_value("", "net/%s/ssid", iface);
+			publish_value("", topicfmt("net/%s/ssid", iface));
 			set_wifi_state(modes[selectedmode]);
 		}
 wifimodeset_done:
@@ -1292,15 +1303,9 @@ wifimodeset_done:
 	mosquitto_sub_topic_tokens_free(&toks, ntoks);
 }
 
-static void publish_value(const char *value, const char *topicfmt, ...)
+static void publish_value(const char *value, const char *topic)
 {
-	va_list va;
 	int ret;
-	static char topic[1024];
-
-	va_start(va, topicfmt);
-	vsprintf(topic, topicfmt, va);
-	va_end(va);
 
 	/* publish cache */
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value ?: ""), value, mqtt_qos, 1);
@@ -1339,21 +1344,26 @@ static const char *valuetostr(const char *fmt, ...)
 	return value;
 }
 
-static void subscribe_topic(const char *topicfmt, ...)
+static const char *topicfmt(const char *fmt, ...)
 {
 	va_list va;
-	int ret;
-	char *topic;
+	static char value[512];
 
-	va_start(va, topicfmt);
-	vasprintf(&topic, topicfmt, va);
+	va_start(va, fmt);
+	vsprintf(value, fmt, va);
 	va_end(va);
+
+	return value;
+}
+
+static void subscribe_topic(const char *topic)
+{
+	int ret;
 
 	/* publish cache */
 	ret = mosquitto_subscribe(mosq, NULL, topic, mqtt_qos);
 	if (ret)
 		mylog(LOG_ERR, "mosquitto_subscribe %s: %s", topic, mosquitto_strerror(ret));
-	free(topic);
 }
 
 static void do_mqtt_maintenance(void *dat)
@@ -1427,8 +1437,8 @@ int main(int argc, char *argv[])
 	if (ret)
 		mylog(LOG_ERR, "mosquitto_connect %s:%i: %s", mqtt_host, mqtt_port, mosquitto_strerror(ret));
 	mosquitto_message_callback_set(mosq, my_mqtt_msg);
-	subscribe_topic("net/%s/ssid/+", iface);
-	subscribe_topic("net/%s/wifistate/set", iface);
+	subscribe_topic(topicfmt("net/%s/ssid/+", iface));
+	subscribe_topic(topicfmt("net/%s/wifistate/set", iface));
 
 	libt_add_timeout(0, do_mqtt_maintenance, mosq);
 
@@ -1509,19 +1519,19 @@ done:
 
 	/* clean scan results in mqtt */
 	for (j = 0; j < nbsss; ++j) {
-		publish_value("", "net/%s/bss/%s/freq", iface, bsss[j].bssid);
-		publish_value("", "net/%s/bss/%s/level", iface, bsss[j].bssid);
-		publish_value("", "net/%s/bss/%s/ssid", iface, bsss[j].bssid);
-		publish_value("", "net/%s/bss/%s/flags", iface, bsss[j].bssid);
+		publish_value("", topicfmt("net/%s/bss/%s/freq", iface, bsss[j].bssid));
+		publish_value("", topicfmt("net/%s/bss/%s/level", iface, bsss[j].bssid));
+		publish_value("", topicfmt("net/%s/bss/%s/ssid", iface, bsss[j].bssid));
+		publish_value("", topicfmt("net/%s/bss/%s/flags", iface, bsss[j].bssid));
 	}
-	publish_value("", "net/%s/bssid", iface);
-	publish_value("", "net/%s/freq", iface);
-	publish_value("", "net/%s/level", iface);
-	publish_value("", "net/%s/ssid", iface);
-	publish_value("", "net/%s/lastAP", iface);
-	publish_value("", "net/%s/lastmesh", iface);
-	publish_value("", "net/%s/stations", iface);
-	publish_value("", "net/%s/wifistate", iface);
+	publish_value("", topicfmt("net/%s/bssid", iface));
+	publish_value("", topicfmt("net/%s/freq", iface));
+	publish_value("", topicfmt("net/%s/level", iface));
+	publish_value("", topicfmt("net/%s/ssid", iface));
+	publish_value("", topicfmt("net/%s/lastAP", iface));
+	publish_value("", topicfmt("net/%s/lastmesh", iface));
+	publish_value("", topicfmt("net/%s/stations", iface));
+	publish_value("", topicfmt("net/%s/wifistate", iface));
 
 	/* terminate */
 	send_self_sync(mosq, mqtt_qos);
