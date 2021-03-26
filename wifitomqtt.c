@@ -120,6 +120,8 @@ static int curr_mode;
 static char curr_bssid[20];
 static int curr_level;
 static int noapbgscan;
+static int saved_rssi;
+static int saved_speed;
 
 static void myfree(void *dat)
 {
@@ -397,6 +399,14 @@ static int is_mode_off(void)
 static void set_wifi_state(const char *str)
 {
 	real_wifi_state = str;
+	if (!strcmp(str, "station")) {
+		if (saved_speed)
+			publish_value(NULL, topicfmt("net/%s/speed", iface));
+		saved_speed = 0;
+		if (saved_rssi)
+			publish_value(NULL, topicfmt("net/%s/rssi", iface));
+		saved_rssi = 0;
+	}
 	if (is_mode_off())
 		/* publish mode 'off' if all is disabled */
 		str = "off";
@@ -465,6 +475,8 @@ static void wpa_cmd_timeout(void *dat)
 
 static void wpa_keepalive(void *dat)
 {
+	if (!curr_mode)
+		wpa_send("SIGNAL_POLL");
 	if (!curr_mode && curr_bssid[0])
 		wpa_send("BSS %s", curr_bssid);
 	else
@@ -593,9 +605,11 @@ static void wpa_recvd_pkt(char *line)
 		/* process value */
 		tok = strtok(line+3, " \t");
 		if (!strcmp(tok, "CTRL-EVENT-CONNECTED")) {
-			if (!curr_mode)
+			if (!curr_mode) {
 				/* only set station when not connected as AP */
 				set_wifi_state("station");
+				wpa_send("SIGNAL_POLL");
+			}
 			wpa_send("STATUS");
 		} else if (!strcmp(tok, "CTRL-EVENT-DISCONNECTED")) {
 			wpa_send("STATUS");
@@ -855,6 +869,22 @@ listitem_done:;
 						topicfmt("net/%s/level", iface));
 			curr_level = level;
 		}
+	} else if (!strcmp("SIGNAL_POLL", head->a)) {
+		char *val;
+
+		for (line = strtok_r(line, "\r\n", &saveptr); line;
+				line = strtok_r(NULL, "\r\n", &saveptr)) {
+			tok = strtok(line, "=");
+			val = strtok(NULL, "=");
+			if (!strcasecmp(tok, "rssi"))
+				publish_ivalue_if_different(val, &saved_rssi,
+						topicfmt("net/%s/rssi", iface));
+
+			else if (!strcasecmp(tok, "linkspeed"))
+				publish_ivalue_if_different(val, &saved_speed,
+						topicfmt("net/%s/speed", iface));
+		}
+
 	} else if (!strcmp("STATUS", head->a)) {
 		char *val;
 		char *ssid = NULL;
@@ -1544,6 +1574,8 @@ done:
 		publish_value("", topicfmt("net/%s/bss/%s/ssid", iface, bsss[j].bssid));
 		publish_value("", topicfmt("net/%s/bss/%s/flags", iface, bsss[j].bssid));
 	}
+	publish_value("", topicfmt("net/%s/speed", iface));
+	publish_value("", topicfmt("net/%s/rssi", iface));
 	publish_value("", topicfmt("net/%s/bssid", iface));
 	publish_value("", topicfmt("net/%s/freq", iface));
 	publish_value("", topicfmt("net/%s/level", iface));
