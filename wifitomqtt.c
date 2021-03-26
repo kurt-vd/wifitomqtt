@@ -103,6 +103,7 @@ static int mqtt_qos = -1;
 /* state */
 static struct mosquitto *mosq;
 static void publish_value(const char *value, const char *topic);
+static void publish_ivalue_if_different(const char *newvalue, int *saved, const char *topic);
 __attribute__((format(printf,1,2)))
 static void publish_failure(const char *valuefmt, ...);
 __attribute__((format(printf,1,2)))
@@ -1311,6 +1312,25 @@ static void publish_value(const char *value, const char *topic)
 	ret = mosquitto_publish(mosq, NULL, topic, strlen(value ?: ""), value, mqtt_qos, 1);
 	if (ret)
 		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
+}
+
+static void publish_ivalue_if_different(const char *newvalue, int *saved, const char *topic)
+{
+	int ret;
+	int newivalue;
+
+	newivalue = strtol(newvalue ?: "", NULL, 0);
+
+	if (newivalue == *saved)
+		return;
+
+	newvalue = valuetostr("%i", newivalue);
+	/* publish cache */
+	ret = mosquitto_publish(mosq, NULL, topic, strlen(newvalue ?: ""), newvalue, mqtt_qos, 1);
+	if (ret)
+		mylog(LOG_ERR, "mosquitto_publish %s: %s", topic, mosquitto_strerror(ret));
+
+	*saved = newivalue;
 }
 
 static void publish_failure(const char *valuefmt, ...)
