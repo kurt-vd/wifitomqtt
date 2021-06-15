@@ -121,6 +121,7 @@ static char *const subopttable[] = {
 
 /* signal handler */
 static volatile int ready;
+static volatile int sigterm;
 
 /* logging */
 static int loglevel = LOG_WARNING;
@@ -376,9 +377,12 @@ static void at_timeout(void *dat)
 	mypublish_change("fail", valuetostr("%s: timeout", strq->a), 0, &saved_fail);
 
 	++nsubsequenttimeouts;
-	if (nsubsequenttimeouts > 5)
-		mylog(LOG_ERR, "last %i commands got timeout, is the TTY responding? I quit",
+	if (nsubsequenttimeouts > 5) {
+		mylog(LOG_WARNING, "last %i commands got timeout, is the TTY responding? I quit",
 				nsubsequenttimeouts);
+		sigterm = 1;
+		return;
+	}
 	if (strq->retry--) {
 		mylog(LOG_WARNING, "%s: timeout, schedule again ...", strq->a);
 	} else {
@@ -1188,7 +1192,7 @@ int main(int argc, char *argv[])
 	/* make sure to remove any retained scan results, set retained */
 	mypublish("ops", "", 1);
 
-	for (;;) {
+	for (; !sigterm;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
 			ret = mosquitto_loop_write(mosq, 1);
@@ -1237,7 +1241,7 @@ int main(int argc, char *argv[])
 			switch (sfdi.ssi_signo) {
 			case SIGTERM:
 			case SIGINT:
-				goto done;
+				sigterm = 1;
 				break;
 			}
 		}
