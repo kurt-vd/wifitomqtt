@@ -352,8 +352,7 @@ static const char *ntstr(int id)
 }
 
 /* AT iface */
-__attribute__((format(printf,1,2)))
-static int at_write(const char *fmt, ...);
+static void at_write(const char *str);
 static int at_ifnotqueued(const char *atcmd);
 /* low-level write */
 static int at_ll_write(const char *str);
@@ -849,27 +848,11 @@ static int at_ll_write(const char *str)
 
 static int at_write(const char *fmt, ...)
 {
-	static char buf[1024];
-	int ret;
-	va_list va;
-
-	va_start(va, fmt);
-	ret = vsprintf(buf, fmt, va);
-	va_end(va);
-
-	if (ret <= 0)
-		return ret;
-
 	/* add to queue */
-	add_strq(buf);
-	if (!strq->next) {
-		/* this is first element in the queue,
-		 * write immediately */
-		if (at_ll_write(strq->a) < 0)
-			/* schedule repeat */
-			libt_add_timeout(1, at_next_cmd, NULL);
-	}
-	return 0;
+	add_strq2(str, retry);
+	if (!strq->next)
+		/* flush to hardware */
+		at_next_cmd(NULL);
 }
 
 static int at_ifnotqueued(const char *atcmd)
@@ -881,7 +864,7 @@ static int at_ifnotqueued(const char *atcmd)
 			return 0;
 	}
 	/* queue a new entry */
-	at_write("%s", atcmd);
+	at_write(atcmd);
 	return 1;
 }
 
@@ -925,11 +908,11 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		return;
 
 	if (!strcmp(msg->topic+mqtt_prefix_len, "raw/send"))
-		at_write("%s", (char *)msg->payload);
+		at_write((char *)msg->payload);
 
 	else if (!strcmp(msg->topic+mqtt_prefix_len, "ops/scan")) {
 		if (options & O_DETACHEDSCAN)
-			at_write("%s", "at+cops=2");
+			at_write("at+cops=2");
 		at_write("at+cops=?");
 	}
 }
