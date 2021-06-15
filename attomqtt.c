@@ -197,6 +197,7 @@ static int pbdone_seen;
 /* command queue */
 struct str {
 	struct str *next;
+	int retry;
 	char a[1];
 };
 
@@ -205,7 +206,8 @@ static struct str *strq, *strqlast;
 static int nsuccessiveblocks;
 static int nsubsequenttimeouts;
 
-static void add_strq(const char *a)
+#define add_strq(x) add_strq2((x), 0)
+static void add_strq2(const char *a, int retry)
 {
 	struct str *str;
 
@@ -213,6 +215,7 @@ static void add_strq(const char *a)
 	if (!str)
 		mylog(LOG_ERR, "malloc str: %s", ESTR(errno));
 	strcpy(str->a, a);
+	str->retry = retry;
 
 	/* linked list */
 	if (strqlast)
@@ -352,7 +355,8 @@ static const char *ntstr(int id)
 }
 
 /* AT iface */
-static void at_write(const char *str);
+#define at_write(str) at_write2((str), 0)
+static void at_write2(const char *str, int retry);
 static int at_ifnotqueued(const char *atcmd);
 /* low-level write */
 static int at_ll_write(const char *str);
@@ -370,13 +374,17 @@ static void at_next_cmd(void *dat)
 static void at_timeout(void *dat)
 {
 	mypublish_change("fail", valuetostr("%s: timeout", strq->a), 0, &saved_fail);
-	mylog(LOG_WARNING, "%s: timeout, removing ...", strq->a);
-	free(pop_strq());
 
 	++nsubsequenttimeouts;
 	if (nsubsequenttimeouts > 5)
 		mylog(LOG_ERR, "last %i commands got timeout, is the TTY responding? I quit",
 				nsubsequenttimeouts);
+	if (strq->retry--) {
+		mylog(LOG_WARNING, "%s: timeout, schedule again ...", strq->a);
+	} else {
+		mylog(LOG_WARNING, "%s: timeout, removing ...", strq->a);
+		free(pop_strq());
+	}
 
 	/* queue next cmd (if any) */
 	at_next_cmd(NULL);
@@ -463,11 +471,11 @@ static void at_recvd_info(char *str)
 				return;
 			}
 issue_at_copn:
-			at_write("at+cspn?");
-			at_write("at+ccid");
-			at_write("at+cimi");
-			at_write("at+cnum");
-			at_write("at+copn");
+			at_write2("at+cspn?", 3);
+			at_write2("at+ccid", 3);
+			at_write2("at+cimi", 3);
+			at_write2("at+cnum", 3);
+			at_write2("at+copn", 3);
 			++my_copn;
 		}
 	} else if (!strcasecmp(str, "PB DONE")) {
@@ -846,7 +854,7 @@ static int at_ll_write(const char *str)
 	return ret;
 }
 
-static int at_write(const char *fmt, ...)
+static void at_write2(const char *str, int retry)
 {
 	/* add to queue */
 	add_strq2(str, retry);
