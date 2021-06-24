@@ -191,6 +191,8 @@ static int pri_nt;
 #define PRI_CREG	3
 #define PRI_COPS	2
 
+static int simcom_not_ready;
+
 /* forward hack declarations */
 static void simcom_fake_pbdone(void *dat);
 
@@ -372,6 +374,8 @@ static int at_ll_write(const char *str);
 
 static void at_next_cmd(void *dat)
 {
+	if (simcom_not_ready)
+		return;
 	if (strq) {
 		if (at_ll_write(strq->a) < 0) {
 			/* reschedule myself */
@@ -477,6 +481,8 @@ static void at_recvd_info(char *str)
 			/* SIM card become ready */
 			if (options & O_SIMCOM) {
 				libt_add_timeout(10, simcom_fake_pbdone, NULL);
+				simcom_not_ready = 1;
+				mylog(LOG_NOTICE, "simcom not ready");
 				/* for simcom modem, don't issue at+copn
 				 * when +cpin arrives as URC (not in response of at+cpin?
 				 */
@@ -491,7 +497,10 @@ issue_at_copn:
 			++my_copn;
 		}
 	} else if (!strcasecmp(str, "PB DONE")) {
+		simcom_not_ready = 0;
 		libt_remove_timeout(simcom_fake_pbdone, NULL);
+		mylog(LOG_NOTICE, "simcom ready");
+		at_next_cmd(NULL);
 		/* resume at+copn */
 		goto issue_at_copn;
 
