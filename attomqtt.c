@@ -206,6 +206,15 @@ static struct str *strq, *strqlast;
 static int nsuccessiveblocks;
 static int nsubsequenttimeouts;
 
+static int capturefd = -1;
+static void ll_capture(const char *prefix, const char *payload)
+{
+	if (capturefd < 0)
+		return;
+
+	mypublish(prefix, payload, 0);
+}
+
 #define add_strq(x) add_strq2((x), 0)
 static void add_strq2(const char *a, int retry)
 {
@@ -738,6 +747,8 @@ static void at_recvd(char *line)
 
 		consumed = sep ? sep - buf : fill;
 
+		if (str && *str)
+			ll_capture("i", str);
 		/* process */
 		if (!*str)
 			/* empty str */
@@ -853,6 +864,7 @@ static int at_ll_write(const char *str)
 			/* operator scan takes time */
 			timeout = 60;
 		libt_add_timeout(timeout, at_timeout, NULL);
+		ll_capture("o", str);
 	}
 	return ret;
 }
@@ -934,6 +946,10 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			value = msg->payloadlen ? strtol((char *)msg->payload, NULL, 0) : loglevel;
 			setmyloglevel(value);
 			mylog(LOG_WARNING, "loglevel set to %i", value);
+
+		} else if (!strcmp("trace", topic)) {
+			capturefd = msg->payloadlen > 0;
+			mylog(LOG_NOTICE, "trace %i", capturefd);
 		}
 	}
 }
