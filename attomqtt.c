@@ -193,7 +193,6 @@ static int pri_nt;
 
 /* forward hack declarations */
 static void simcom_fake_pbdone(void *dat);
-static int pbdone_seen;
 
 /* command queue */
 struct str {
@@ -483,7 +482,7 @@ issue_at_copn:
 			++my_copn;
 		}
 	} else if (!strcasecmp(str, "PB DONE")) {
-		pbdone_seen = 1;
+		libt_remove_timeout(simcom_fake_pbdone, NULL);
 		/* resume at+copn */
 		goto issue_at_copn;
 
@@ -1305,8 +1304,7 @@ done:
 /* some hacks */
 static void simcom_fake_pbdone(void *dat)
 {
-	if (!pbdone_seen)
-		at_recvd_info("PB DONE");
+	at_recvd_info("PB DONE");
 }
 
 struct quirck {
