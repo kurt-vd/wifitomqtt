@@ -925,6 +925,16 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 		if (options & O_DETACHEDSCAN)
 			at_write("at+cops=2");
 		at_write("at+cops=?");
+
+	} else if (!strncmp(msg->topic+mqtt_prefix_len, "cfg/", 4)) {
+		const char *topic = msg->topic + mqtt_prefix_len + 4;
+		int value;
+
+		if (!strcmp("loglevel", topic)) {
+			value = msg->payloadlen ? strtol((char *)msg->payload, NULL, 0) : loglevel;
+			setmyloglevel(value);
+			mylog(LOG_WARNING, "loglevel set to %i", value);
+		}
 	}
 }
 
@@ -990,6 +1000,7 @@ int main(int argc, char *argv[])
 	sigset_t sigmask;
 
 	setlocale(LC_ALL, "");
+	setmylog(NAME, 0, LOG_LOCAL2, loglevel);
 	/* argument parsing */
 	while ((opt = getopt_long(argc, argv, optstring, long_opts, NULL)) >= 0)
 	switch (opt) {
@@ -998,7 +1009,7 @@ int main(int argc, char *argv[])
 				NAME, VERSION, __DATE__, __TIME__);
 		exit(0);
 	case 'v':
-		++loglevel;
+		setmyloglevel(++loglevel);
 		break;
 	case 'h':
 		mqtt_host = optarg;
@@ -1068,7 +1079,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	setmylog(NAME, 0, LOG_LOCAL2, loglevel);
 	if (changed_options & O_CNTI)
 		mylog(LOG_WARNING, "program option '-o cnti' became obsoleted");
 
@@ -1123,6 +1133,7 @@ int main(int argc, char *argv[])
 	mosquitto_message_callback_set(mosq, my_mqtt_msg);
 	subscribe_topic("%sraw/send", mqtt_prefix);
 	subscribe_topic("%sops/scan", mqtt_prefix);
+	subscribe_topic("%scfg/#", mqtt_prefix);
 
 	/* prepare poll */
 	pf[0].fd = atsock;

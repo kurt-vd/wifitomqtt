@@ -15,17 +15,23 @@
 static int logtostderr = -1;
 static int maxloglevel;
 
+void setmyloglevel(int level)
+{
+	maxloglevel = level;
+	if (!logtostderr)
+		setlogmask(LOG_UPTO(level));
+}
 void setmylog(const char *name, int options, int facility, int level)
 {
 	char *tty;
 
 	tty = ttyname(STDERR_FILENO);
 	logtostderr = tty && !!strcmp(tty, "/dev/console");
+	maxloglevel = level;
 	if (!logtostderr && name) {
 		openlog(name, options, facility);
 		setlogmask(LOG_UPTO(level));
 	} else {
-		maxloglevel = level;
 		/* we append \n seperately.
 		 * Make stderr line-buffered, so it results in 1 single write
 		 */
