@@ -1382,6 +1382,7 @@ static void changed_brand(void)
 
 static struct quirck model_quircks[] = {
 	{ O_DETACHEDSCAN, "SIM75", "detached scan", },
+	{ O_DETACHEDSCAN, "SIM76", "detached scan", },
 	{},
 };
 
