@@ -74,6 +74,10 @@ static const char help_msg[] =
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
+	"\n"
+	"MQTT topics\n"
+	" PREFIX/cfg/loglevel	overrule verbosity 0..7\n"
+	" PREFIX/cfg/trace	1 to emit all port traffic into MQTT\n"
 	;
 
 #ifdef _GNU_SOURCE
