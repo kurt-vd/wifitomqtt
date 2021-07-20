@@ -475,10 +475,11 @@ static void wpa_cmd_timeout(void *dat)
 
 static void wpa_keepalive(void *dat)
 {
-	if (!curr_mode)
-		wpa_send("SIGNAL_POLL");
 	if (!curr_mode && curr_bssid[0])
+	{
 		wpa_send("BSS %s", curr_bssid);
+		wpa_send("SIGNAL_POLL");
+	}
 	else
 		wpa_send("PING");
 }
