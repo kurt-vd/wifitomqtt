@@ -1193,34 +1193,34 @@ int main(int argc, char *argv[])
 	at_write("ate0");
 
 	/* device info */
-	at_write("at+cgmi");
-	at_write("at+cgmm");
-	at_write("at+cgmr");
-	at_write("at+cgsn");
+	at_write2("at+cgmi", 1);
+	at_write2("at+cgmm", 1);
+	at_write2("at+cgmr", 1);
+	at_write2("at+cgsn", 1);
 
 	/* modem state */
-	at_write("at+cpin?");
+	at_write2("at+cpin?", 1);
 	if (options & O_CREG)
 		at_creg(NULL);
 	else
-		at_write("at+creg?");
+		at_write2("at+creg?", 1);
 	if (options & O_CGREG)
 		at_cgreg(NULL);
 	else
-		at_write("at+cgreg?");
+		at_write2("at+cgreg?", 1);
 	if (options & O_CSQ)
 		at_csq(NULL);
 	else if (options & O_AUTOCSQ) {
-		at_write("at+autocsq=1,1");
-		at_write("at+csqdelta=1");
+		at_write2("at+autocsq=1,1", 1);
+		at_write2("at+csqdelta=1", 1);
 	} else
 		at_write("at+csq");
 	/* set alphanumeric operator names */
-	at_write("at+cops=3,2");
+	at_write2("at+cops=3,2", 1);
 	if (options & O_COPS)
 		at_cops(NULL);
 	else
-		at_write("at+cops?");
+		at_write2("at+cops?", 1);
 
 	/* clear potentially retained values in the broker */
 	mypublish("rssi", NULL, 1);
