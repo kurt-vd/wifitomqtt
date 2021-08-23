@@ -1368,9 +1368,6 @@ static void test_quircks(const char *haystack, const struct quirck *q)
 				options |= q->option;
 				mylog(LOG_WARNING, "enabled %s", q->desc);
 			}
-		} else if (options & q->option) {
-			options &= ~q->option;
-			mylog(LOG_WARNING, "disabled %s", q->desc);
 		}
 	}
 }
