@@ -195,7 +195,8 @@ static int pri_nt;
 #define PRI_CREG	3
 #define PRI_COPS	2
 
-static int simcom_not_ready;
+static int simcard_ready;
+static int simcom_pbdone;
 
 /* forward hack declarations */
 static void simcom_fake_pbdone(void *dat);
@@ -212,6 +213,7 @@ static struct str *strq, *strqlast;
 static int nsuccessiveblocks;
 static int nsubsequenttimeouts;
 static int curr_retry;
+static int cgsn_seen;
 
 static int capturefd = -1;
 static void ll_capture(const char *prefix, const char *payload)
@@ -379,7 +381,7 @@ static int at_ll_write(const char *str);
 
 static void at_next_cmd(void *dat)
 {
-	if (simcom_not_ready)
+	if ((options & O_SIMCOM) && simcard_ready && !simcom_pbdone)
 		return;
 	if (strq) {
 		if (at_ll_write(strq->a) < 0) {
@@ -486,12 +488,18 @@ static void at_recvd_info(char *str)
 	if (!str) {
 
 	} else if (!strncasecmp(str, "+cpin: ", 7)) {
+		if (!cgsn_seen) {
+			/* another +cpin will come soon
+			 * after we have collected all modem info */
+			mylog(LOG_NOTICE, "wait on modem properties ('%s')", str);
+			return;
+		}
 		if (!strcasecmp(str+7, "ready")) {
 			/* SIM card become ready */
-			if (options & O_SIMCOM) {
+			simcard_ready = 1;
+			if ((options & O_SIMCOM) && !simcom_pbdone) {
 				libt_add_timeout(10, simcom_fake_pbdone, NULL);
-				simcom_not_ready = 1;
-				mylog(LOG_NOTICE, "simcom not ready");
+				mylog(LOG_NOTICE, "simcom not yet ready ('%s')", str);
 				/* for simcom modem, don't issue at+copn
 				 * when +cpin arrives as URC (not in response of at+cpin?
 				 */
@@ -506,10 +514,12 @@ issue_at_copn:
 			++my_copn;
 		}
 	} else if (!strcasecmp(str, "PB DONE")) {
-		simcom_not_ready = 0;
+		simcom_pbdone = 1;
 		libt_remove_timeout(simcom_fake_pbdone, NULL);
-		mylog(LOG_NOTICE, "simcom ready");
-		at_next_cmd(NULL);
+		mylog(LOG_NOTICE, "simcom ready ('%s')", str);
+		if ((options & O_SIMCOM) && simcard_ready) {
+			at_next_cmd(NULL);
+		}
 		/* resume at+copn */
 		goto issue_at_copn;
 
@@ -722,9 +732,13 @@ static void at_recvd_response(int argc, char *argv[])
 			/* argv[1] is value */
 			publish_received_property("rev", strip_quotes(argv[1]), &saved_rev);
 	} else if (!strcasecmp(argv[0], "at+cgsn")) {
-		if (argc > 2)
+		if (argc > 2) {
 			/* argv[1] is value */
 			publish_received_property("imei", strip_quotes(argv[1]), &saved_imei);
+			if (!cgsn_seen)
+				mylog(LOG_NOTICE, "modem properties received");
+			cgsn_seen = 1;
+		}
 	}
 }
 
@@ -1357,6 +1371,7 @@ done:
 /* some hacks */
 static void simcom_fake_pbdone(void *dat)
 {
+	mylog(LOG_NOTICE, "fake PB DONE");
 	at_recvd_info("PB DONE");
 }
 
