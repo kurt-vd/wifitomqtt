@@ -211,6 +211,7 @@ static struct str *strq, *strqlast;
 /* count successive blocked writes */
 static int nsuccessiveblocks;
 static int nsubsequenttimeouts;
+static int curr_retry;
 
 static int capturefd = -1;
 static void ll_capture(const char *prefix, const char *payload)
@@ -399,11 +400,15 @@ static void at_timeout(void *dat)
 		sigterm = 1;
 		return;
 	}
-	if (strq->retry--) {
+	if (++curr_retry < strq->retry) {
 		mylog(LOG_WARNING, "%s: timeout, schedule again ...", strq->a);
 	} else {
 		mylog(LOG_WARNING, "%s: timeout, removing ...", strq->a);
 		free(pop_strq());
+		if (strq->retry) {
+			/* terminate program completely */
+			mylog(LOG_ERR, "failed command that needs success: %s", strq->a);
+		}
 	}
 
 	/* queue next cmd (if any) */
@@ -670,6 +675,9 @@ static void at_recvd_response(int argc, char *argv[])
 	} else if (strcmp(argv[argc-1], "OK")) {
 		mypublish_change("fail", valuetostr("%s: %s", argv[0], argv[argc-1]), 0, &saved_fail);
 		mylog(LOG_WARNING, "Command '%s': %s", argv[0], argv[argc-1]);
+		if (strq && strq->retry)
+			/* terminate program completely */
+			mylog(LOG_ERR, "failed command that needs success: %s", argv[0]);
 
 	} else if (!strcasecmp(argv[0], "at+cimi")) {
 		const struct operator *op;
@@ -829,6 +837,7 @@ static void at_recvd(char *line)
 			libt_remove_timeout(at_timeout, NULL);
 			/* reset timeout counter */
 			nsubsequenttimeouts = 0;
+			curr_retry = 0;
 			/* remove head from queue */
 			free(pop_strq());
 			/* issue next cmd to device */
