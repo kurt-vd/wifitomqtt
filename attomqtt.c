@@ -68,7 +68,7 @@ static const char help_msg[] =
 	"	cops[=DELAY]	Enable periodic operator monitoring\n"
 	"	ceer		Issue AT+CEER on error URC's\n"
 	"	simcom		Enable hack that waits for 'PB DONE' EONS report after\n"
-	"			unsolicited '+SIM: READY', since simcom modems throw those EONS report\n"
+	"			unsolicited '+CPIN: READY', since simcom modems throw those EONS report\n"
 	"			in between regular output\n"
 	"	detachedscan	Run scan when modem is not registered, i.e. detach before scan\n"
 	"\n"
