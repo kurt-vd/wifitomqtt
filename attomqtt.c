@@ -215,7 +215,7 @@ static int nsubsequenttimeouts;
 static int capturefd = -1;
 static void ll_capture(const char *prefix, const char *payload)
 {
-	if (capturefd < 0)
+	if (capturefd <= 0)
 		return;
 
 	mypublish(prefix, payload, 0);
@@ -761,7 +761,7 @@ static void at_recvd(char *line)
 		consumed = sep ? sep - buf : fill;
 
 		if (str && *str)
-			ll_capture("i", str);
+			ll_capture("raw/i", str);
 		/* process */
 		if (!*str)
 			/* empty str */
@@ -877,7 +877,7 @@ static int at_ll_write(const char *str)
 			/* operator scan takes time */
 			timeout = 60;
 		libt_add_timeout(timeout, at_timeout, NULL);
-		ll_capture("o", str);
+		ll_capture("raw/o", str);
 	}
 	return ret;
 }
@@ -959,6 +959,8 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			value = msg->payloadlen ? strtol((char *)msg->payload, NULL, 0) : loglevel;
 			setmyloglevel(value);
 			mylog(LOG_WARNING, "loglevel set to %i", value);
+			if (value >= LOG_DEBUG && capturefd <= 0)
+				capturefd = 1;
 
 		} else if (!strcmp("trace", topic)) {
 			capturefd = msg->payloadlen > 0;
@@ -1039,6 +1041,8 @@ int main(int argc, char *argv[])
 		exit(0);
 	case 'v':
 		setmyloglevel(++loglevel);
+		if (loglevel >= LOG_DEBUG && capturefd <= 0)
+			capturefd = 1;
 		break;
 	case 'h':
 		mqtt_host = optarg;
