@@ -71,13 +71,16 @@ static const char help_msg[] =
 	"			unsolicited '+CPIN: READY', since simcom modems throw those EONS report\n"
 	"			in between regular output\n"
 	"	detachedscan	Run scan when modem is not registered, i.e. detach before scan\n"
+	" -t, --trace=MODE	enable port traffice traces\n"
+	"			m (mqtt), s (stdout), l (syslog)\n"
 	"\n"
 	"Arguments\n"
 	" DEVICE	TTY device for modem\n"
 	"\n"
 	"MQTT topics\n"
 	" PREFIX/cfg/loglevel	overrule verbosity 0..7\n"
-	" PREFIX/cfg/trace	1 to emit all port traffic into MQTT\n"
+	" PREFIX/cfg/trace	emit all port traffic to tracer\n"
+	"			m (mqtt), s (stdout), l (syslog)\n"
 	;
 
 #ifdef _GNU_SOURCE
@@ -90,13 +93,14 @@ static struct option long_opts[] = {
 	{ "prefix", required_argument, NULL, 'p', },
 
 	{ "options", required_argument, NULL, 'o', },
+	{ "trace", required_argument, NULL, 't', },
 	{ },
 };
 #else
 #define getopt_long(argc, argv, optstring, longopts, longindex) \
 	getopt((argc), (argv), (optstring))
 #endif
-static const char optstring[] = "Vv?h:p:o:";
+static const char optstring[] = "Vv?h:p:o:t:";
 
 static char *const subopttable[] = {
 	"csq",
@@ -215,13 +219,24 @@ static int nsubsequenttimeouts;
 static int curr_retry;
 static int cgsn_seen;
 
-static int capturefd = -1;
+#define CAP_LOG	'l'
+#define CAP_MQTT 'm'
+#define CAP_STDOUT 's'
+
+static int capture_mode;
 static void ll_capture(const char *prefix, const char *payload)
 {
-	if (capturefd <= 0)
-		return;
-
-	mypublish(prefix, payload, 0);
+	switch (capture_mode) {
+	case CAP_LOG:
+		mylog(LOG_INFO, "%s: %s", prefix, payload);
+		break;
+	case CAP_STDOUT:
+		printf("%s: %s\n", prefix, payload);
+		break;
+	case CAP_MQTT:
+		mypublish(prefix, payload, 0);
+		break;
+	}
 }
 
 #define add_strq(x) add_strq2((x), 0)
@@ -984,12 +999,13 @@ static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitt
 			value = msg->payloadlen ? strtol((char *)msg->payload, NULL, 0) : loglevel;
 			setmyloglevel(value);
 			mylog(LOG_WARNING, "loglevel set to %i", value);
-			if (value >= LOG_DEBUG && capturefd <= 0)
-				capturefd = 1;
 
 		} else if (!strcmp("trace", topic)) {
-			capturefd = msg->payloadlen > 0;
-			mylog(LOG_NOTICE, "trace %i", capturefd);
+			if (msg->payloadlen > 0)
+				capture_mode = ((char *)msg->payload)[0];
+			else
+				capture_mode = 0;
+			mylog(LOG_NOTICE, "trace %c (%s)", capture_mode ?: '-', (char *)msg->payload);
 		}
 	}
 }
@@ -1066,8 +1082,10 @@ int main(int argc, char *argv[])
 		exit(0);
 	case 'v':
 		setmyloglevel(++loglevel);
-		if (loglevel >= LOG_DEBUG && capturefd <= 0)
-			capturefd = 1;
+		break;
+	case 't':
+		capture_mode = *optarg;
+		mylog(LOG_NOTICE, "trace %c", capture_mode ?: '-');
 		break;
 	case 'h':
 		mqtt_host = optarg;
