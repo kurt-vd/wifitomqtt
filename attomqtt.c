@@ -124,7 +124,7 @@ static char *const subopttable[] = {
 };
 
 /* signal handler */
-static volatile int ready;
+static volatile int mqtt_ready;
 static volatile int sigterm;
 
 /* logging */
@@ -909,7 +909,7 @@ static void at_write2(const char *str, int retry)
 {
 	/* add to queue */
 	add_strq2(str, retry);
-	if (!strq->next)
+	if (mqtt_ready && !strq->next)
 		/* flush to hardware */
 		at_next_cmd(NULL);
 }
@@ -959,7 +959,9 @@ static void at_cops(void *dat)
 static void my_mqtt_msg(struct mosquitto *mosq, void *dat, const struct mosquitto_message *msg)
 {
 	if (is_self_sync(msg)) {
-		ready = 1;
+		mylog(LOG_NOTICE, "MQTT ready");
+		mqtt_ready = 1;
+		at_next_cmd(NULL);
 		return;
 	}
 
@@ -1258,6 +1260,9 @@ int main(int argc, char *argv[])
 	/* make sure to remove any retained scan results, set retained */
 	mypublish("ops", "", 1);
 
+	/* allow to cat all mqtt configs before starting */
+	send_self_sync(mosq, mqtt_qos);
+
 	for (; !sigterm;) {
 		libt_flush();
 		if (mosquitto_want_write(mosq)) {
@@ -1265,7 +1270,12 @@ int main(int argc, char *argv[])
 			if (ret)
 				mylog(LOG_ERR, "mosquitto_loop_write: %s", mosquitto_strerror(ret));
 		}
-		ret = poll(pf, 3, libt_get_waittime());
+		if (!mqtt_ready) {
+			/* don't process at port yet */
+			pf[0].revents = 0;
+			ret = poll(pf+1, 2, libt_get_waittime());
+		} else
+			ret = poll(pf, 3, libt_get_waittime());
 		if (ret < 0 && errno == EINTR)
 			continue;
 		if (ret < 0)
@@ -1339,8 +1349,9 @@ done:
 	mypublish("ops", "", 0);
 
 	/* terminate */
+	mqtt_ready = 0;
 	send_self_sync(mosq, mqtt_qos);
-	while (!ready) {
+	while (!mqtt_ready) {
 		ret = mosquitto_loop(mosq, 10, 1);
 		if (ret)
 			mylog(LOG_ERR, "mosquitto_loop: %s", mosquitto_strerror(ret));
