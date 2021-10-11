@@ -914,6 +914,10 @@ static int at_ll_write(const char *str)
 		} else if (!strncasecmp(str, "at+cops=", 8))
 			/* operator scan takes time */
 			timeout = 60;
+		else if (!strcasecmp(str, "at+copn"))
+			/* simcom 7500V modem takes up to 7s */
+			timeout = 30;
+
 		libt_add_timeout(timeout, at_timeout, NULL);
 		ll_capture("raw/o", str);
 	}
